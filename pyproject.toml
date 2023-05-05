@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 write_to = "generic-runner/version.py"
 
 [project.scripts]
-my-client = "generic_runner:main"
+generic-runner = "generic_runner:main"
 
 [tool.ruff]
 select = ["E", "W", "F", "I", "D", "S", "B", "A", "PT", "Q", "TID"]
