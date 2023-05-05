@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2", 'setuptools_scm_git_archive']
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+write_to = "generic-runner/version.py"
+
+[project.scripts]
+my-client = "generic_runner:main"
+
+[tool.ruff]
+select = ["E", "W", "F", "I", "D", "S", "B", "A", "PT", "Q", "TID"]
+ignore = ["B905"]  # only available from python 3.10
+line-length = 120
+
+[tool.ruff.per-file-ignores]
+"generic_runner/tests/*" = ["S101"]  # assert allowed in tests
+
+[tool.ruff.pydocstyle]
+convention = "google"
