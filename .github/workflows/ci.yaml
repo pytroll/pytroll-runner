@@ -20,7 +20,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-          pip install -U pytest pytest-cov pyyaml
+          pip install -U pytest pytest-cov pyyaml posttroll
       - name: Run tests
         run: |
           pytest --cov=pytroll_runner pytroll_runner/tests --cov-report=xml
