@@ -1,6 +1,7 @@
 [project]
 name = "pytroll-runner"
 dynamic = ["version"]
+dependencies = ["posttroll"]
 
 [build-system]
 requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2", 'setuptools_scm_git_archive']
