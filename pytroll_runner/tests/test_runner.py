@@ -1,4 +1,4 @@
-"""Tests for the generic runner."""
+"""Tests for the pytroll runner."""
 import os
 from unittest import mock
 
@@ -9,6 +9,7 @@ from posttroll.testing import patched_publisher, patched_subscriber_recv
 
 from pytroll_runner import (
     generate_message_from_expected_files,
+    main,
     read_config,
     run_and_publish,
     run_from_new_subscriber,
@@ -90,7 +91,7 @@ def test_run_on_messages_does_not_pass_dataset_from_ack(command):
 def test_run_starts_and_stops_subscriber(command):
     """Test that run starts and stops a subscriber."""
     subscriber_settings = dict(nameserver=False, addresses=["ipc://bla"])
-    with mock.patch("generic_runner.create_subscriber_from_dict_config") as subscriber_creator:
+    with mock.patch("pytroll_runner.create_subscriber_from_dict_config") as subscriber_creator:
         subscriber_creator.return_value.recv.return_value = []
         for _ in run_from_new_subscriber(command, subscriber_settings):
             pass
@@ -279,3 +280,15 @@ def test_config_reader(command, tmp_path):
     assert subscriber_config == sub_config
     assert command_to_call == command_path
     assert publisher_config == pub_config
+
+
+def test_main_crashes_when_config_missing():
+    """Test that main crashes when config is missing."""
+    with pytest.raises(SystemExit):
+        main([])
+
+
+def test_main_crashes_when_config_file_missing():
+    """Test that main crashes when the config file is missing."""
+    with pytest.raises(FileNotFoundError):
+        main(["moose_config.yaml"])

@@ -18,8 +18,8 @@ subscriber_config:
 
 
 """
+import argparse
 import os
-import sys
 from contextlib import closing
 from glob import glob
 from subprocess import PIPE, Popen
@@ -30,9 +30,18 @@ from posttroll.publisher import create_publisher_from_dict_config
 from posttroll.subscriber import create_subscriber_from_dict_config
 
 
-def main():
+def main(args=None):
     """Main script."""
-    return run_and_publish(sys.argv[1])
+    parsed_args = parse_args(args=args)
+    return run_and_publish(parsed_args.config_file)
+
+def parse_args(args=None):
+    """Parse commandline arguments."""
+    parser = argparse.ArgumentParser("Pytroll Runner",
+                                     description="Automate third party software in a pytroll environment")
+    parser.add_argument("config_file",
+                        help="The configuration file to run on.")
+    return parser.parse_args(args)
 
 
 def run_and_publish(config_file):
