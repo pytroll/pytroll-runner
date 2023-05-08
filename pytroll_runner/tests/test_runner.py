@@ -7,7 +7,7 @@ import yaml
 from posttroll.message import Message
 from posttroll.testing import patched_publisher, patched_subscriber_recv
 
-from generic_runner import (
+from pytroll_runner import (
     generate_message_from_expected_files,
     read_config,
     run_and_publish,

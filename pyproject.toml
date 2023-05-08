@@ -7,10 +7,10 @@ requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2", 'setuptools_
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
-# write_to = "generic-runner/version.py"
+# write_to = "pytroll-runner/version.py"
 
 [project.scripts]
-generic-runner = "generic_runner:main"
+pytroll-runner = "pytroll_runner:main"
 
 [tool.ruff]
 select = ["E", "W", "F", "I", "D", "S", "B", "A", "PT", "Q", "TID"]
@@ -18,7 +18,7 @@ ignore = ["B905"]  # only available from python 3.10
 line-length = 120
 
 [tool.ruff.per-file-ignores]
-"generic_runner/tests/*" = ["S101"]  # assert allowed in tests
+"pytroll_runner/tests/*" = ["S101"]  # assert allowed in tests
 
 [tool.ruff.pydocstyle]
 convention = "google"

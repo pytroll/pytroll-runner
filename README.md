@@ -1,1 +1,1 @@
-# generic-runner
+# pytroll-runner
