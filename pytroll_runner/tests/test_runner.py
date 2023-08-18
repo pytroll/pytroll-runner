@@ -238,6 +238,15 @@ def single_file_to_glob(tmp_path):
     pattern = os.fspath(tmp_path / "file?")
     return pattern
 
+@pytest.fixture()
+def old_generated_file(tmp_path):
+    """Create a single file to glob."""
+    some_files = ["file0.bla"]
+    for filename in some_files:
+        with open(tmp_path / filename, "w") as fd:
+            fd.write("hi")
+    return filename
+
 
 def test_run_and_publish(tmp_path, command_bla, files_to_glob):
     """Test run and publish."""
@@ -263,6 +272,46 @@ def test_run_and_publish(tmp_path, command_bla, files_to_glob):
             assert len(published_messages) == 1
             for ds, filename in zip(published_messages[0].data["dataset"], some_files):
                 assert ds["uid"] == filename + ".bla"
+
+
+def test_run_and_publish_does_not_pick_old_files(tmp_path, command_bla, files_to_glob, old_generated_file):
+    """Test run and publish."""
+    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
+    pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
+                      expected_files=os.fspath(tmp_path / "file?.bla"),
+                      topic="/hi/there")
+    command_path = os.fspath(command_bla)
+    test_config = dict(subscriber_config=sub_config,
+                       script=command_path,
+                       publisher_config=pub_config)
+    yaml_file = tmp_path / "config.yaml"
+    with open(yaml_file, "w") as fd:
+        fd.write(yaml.dump(test_config))
+
+    some_files = ["file1"]
+    data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
+    first_message = Message("some_topic", "dataset", data=data)
+
+    with patched_subscriber_recv([first_message]):
+        with patched_publisher() as published_messages:
+            run_and_publish(yaml_file)
+            assert len(published_messages) == 1
+            assert published_messages[0].data["uid"] == "file1.bla"
+
+    some_files = ["file2"]
+    data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
+    second_message = Message("some_topic", "dataset", data=data)
+
+    some_files = ["file3"]
+    data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
+    third_message = Message("some_topic", "dataset", data=data)
+
+    with patched_subscriber_recv([second_message, third_message]):
+        with patched_publisher() as published_messages:
+            run_and_publish(yaml_file)
+            assert len(published_messages) == 2
+            assert published_messages[0].data["uid"] == "file2.bla"
+            assert published_messages[1].data["uid"] == "file3.bla"
 
 
 def test_config_reader(command, tmp_path):

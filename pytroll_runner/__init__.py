@@ -29,6 +29,8 @@ from posttroll.message import Message
 from posttroll.publisher import create_publisher_from_dict_config
 from posttroll.subscriber import create_subscriber_from_dict_config
 
+FILES_ALREADY_THERE = set()
+
 
 def main(args=None):
     """Main script."""
@@ -47,10 +49,20 @@ def parse_args(args=None):
 def run_and_publish(config_file):
     """Run the command and publish the expected files."""
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
+    check_existing_files(publisher_config)
+
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
         for _, mda in run_from_new_subscriber(command_to_call, subscriber_config):
             message = generate_message_from_expected_files(publisher_config, mda)
             pub.send(message)
+
+
+def check_existing_files(publisher_config):
+    """Check for previously generated files."""
+    global FILES_ALREADY_THERE
+    filepattern = publisher_config["expected_files"]
+    files = set(glob(filepattern))
+    FILES_ALREADY_THERE = files
 
 
 def read_config(config_file):
@@ -91,22 +103,31 @@ def run_on_files(command, files):
 
 def generate_message_from_expected_files(pub_config, extra_metadata=None):
     """Generate a message containing the expected files."""
-    filepattern = pub_config["expected_files"]
     metadata = populate_metadata(extra_metadata, pub_config.get("static_metadata", {}))
 
     dataset = []
-    files = glob(filepattern)
-    for filepath in sorted(files):
+
+    new_files = find_new_files(pub_config)
+
+    for filepath in sorted(new_files):
         filename = os.path.basename(filepath)
         dataset.append(dict(uid=filename, uri=filepath))
 
-    if len(files) == 1:
+    if len(new_files) == 1:
         metadata.update(dataset[0])
         message_type = "file"
     else:
         metadata["dataset"] = dataset
         message_type = "dataset"
     return Message(pub_config["topic"], message_type, metadata)
+
+
+def find_new_files(pub_config):
+    """Find new files matching the file pattern."""
+    old_files = FILES_ALREADY_THERE
+    check_existing_files(pub_config)
+    new_files = FILES_ALREADY_THERE - old_files
+    return new_files
 
 
 def populate_metadata(extra_metadata, static_metadata):
