@@ -29,13 +29,12 @@ from posttroll.message import Message
 from posttroll.publisher import create_publisher_from_dict_config
 from posttroll.subscriber import create_subscriber_from_dict_config
 
-FILES_ALREADY_THERE = set()
-
 
 def main(args=None):
     """Main script."""
     parsed_args = parse_args(args=args)
     return run_and_publish(parsed_args.config_file)
+
 
 def parse_args(args=None):
     """Parse commandline arguments."""
@@ -49,20 +48,19 @@ def parse_args(args=None):
 def run_and_publish(config_file):
     """Run the command and publish the expected files."""
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
-    check_existing_files(publisher_config)
+    preexisting_files = check_existing_files(publisher_config)
 
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
         for _, mda in run_from_new_subscriber(command_to_call, subscriber_config):
-            message = generate_message_from_expected_files(publisher_config, mda)
+            message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
+            preexisting_files = check_existing_files(publisher_config)
             pub.send(message)
 
 
 def check_existing_files(publisher_config):
     """Check for previously generated files."""
-    global FILES_ALREADY_THERE
     filepattern = publisher_config["expected_files"]
-    files = set(glob(filepattern))
-    FILES_ALREADY_THERE = files
+    return set(glob(filepattern))
 
 
 def read_config(config_file):
@@ -101,13 +99,13 @@ def run_on_files(command, files):
     return out
 
 
-def generate_message_from_expected_files(pub_config, extra_metadata=None):
+def generate_message_from_expected_files(pub_config, extra_metadata=None, preexisting_files=None):
     """Generate a message containing the expected files."""
     metadata = populate_metadata(extra_metadata, pub_config.get("static_metadata", {}))
 
     dataset = []
 
-    new_files = find_new_files(pub_config)
+    new_files = find_new_files(pub_config, preexisting_files or set())
 
     for filepath in sorted(new_files):
         filename = os.path.basename(filepath)
@@ -122,12 +120,11 @@ def generate_message_from_expected_files(pub_config, extra_metadata=None):
     return Message(pub_config["topic"], message_type, metadata)
 
 
-def find_new_files(pub_config):
+def find_new_files(pub_config, preexisting_files):
     """Find new files matching the file pattern."""
-    old_files = FILES_ALREADY_THERE
-    check_existing_files(pub_config)
-    new_files = FILES_ALREADY_THERE - old_files
-    return new_files
+    old_files = preexisting_files
+    all_files = check_existing_files(pub_config)
+    return all_files - old_files
 
 
 def populate_metadata(extra_metadata, static_metadata):
