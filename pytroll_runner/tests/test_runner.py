@@ -27,6 +27,24 @@ for file in $*; do
 done
 """
 
+# ruff: noqa: E501
+
+script_aws = """#!/bin/bash
+echo "2023-08-17T09:48:45.949211 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 1: Starting IPF-AWS-L1 v1.0.1 processor (elapsed 0.000 seconds)
+2023-08-17T09:48:45.949358 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 2: Loading JobOrder (elapsed 0.000 seconds)
+2023-08-17T09:48:45.950030 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 3: Initializing AWS L1 (elapsed 0.001 seconds)
+2023-08-17T09:48:45.950101 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Reading Configuration file : /local_disk/aws_test/conf/L1/AWS_L1_Configuration.xml
+2023-08-17T09:48:46.047664 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 4: Executing AWS L1A Module (elapsed 0.099 seconds)
+2023-08-17T09:48:46.226927 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 5: Executing AWS L1B Module (elapsed 0.278 seconds)
+2023-08-17T09:48:46.321622 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 6: Writing AWS L1 Output (elapsed 0.373 seconds)
+2023-08-17T09:48:46.329884 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] lib4eo::NcMap: Loading map file '/local_disk/aws_test/conf/L1/AWS-L1B-RAD.xsd'
+2023-08-17T09:48:46.578498 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Written output file : /local_disk/aws_test/test/RAD_AWS_1B/W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc
+2023-08-17T09:48:46.588984 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 7: Exiting (elapsed 0.640 seconds)
+2023-08-17T09:48:46.589031 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] IPF-AWS-L1 v1.0.1 processor ending with success
+2023-08-17T09:48:46.589041 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Exiting with EXIT CODE 0"
+"""
+
+
 @pytest.fixture()
 def command(tmp_path):
     """Make a command script that just prints out the files it got."""
@@ -43,6 +61,16 @@ def command_bla(tmp_path):
     command_file = tmp_path / "myscript_bla.sh"
     with open(command_file, "w") as fobj:
         fobj.write(script_bla)
+    os.chmod(command_file, 0o700)
+    return command_file
+
+
+@pytest.fixture()
+def command_aws(tmp_path):
+    """Make a command script that outputs a log with an output filename."""
+    command_file = tmp_path / "myscript_aws.sh"
+    with open(command_file, "w") as fobj:
+        fobj.write(script_aws)
     os.chmod(command_file, 0o700)
     return command_file
 
@@ -312,6 +340,35 @@ def test_run_and_publish_does_not_pick_old_files(tmp_path, command_bla, files_to
             assert len(published_messages) == 2
             assert published_messages[0].data["uid"] == "file2.bla"
             assert published_messages[1].data["uid"] == "file3.bla"
+
+
+def test_run_and_publish_with_files_from_log(tmp_path, command_aws):
+    """Test run and publish."""
+    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
+    pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
+                      expected_files=os.fspath(tmp_path / "file?.bla"),
+                      topic="/hi/there",
+                      output_files_log_regex="Written output file : (.*.nc)")
+    command_path = os.fspath(command_aws)
+    test_config = dict(subscriber_config=sub_config,
+                       script=command_path,
+                       publisher_config=pub_config)
+    yaml_file = tmp_path / "config.yaml"
+    with open(yaml_file, "w") as fd:
+        fd.write(yaml.dump(test_config))
+
+    some_files = ["file1"]
+    data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
+    first_message = Message("some_topic", "dataset", data=data)
+
+    expected = "W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc"
+
+    with patched_subscriber_recv([first_message]):
+        with patched_publisher() as published_messages:
+            run_and_publish(yaml_file)
+            assert len(published_messages) == 1
+            assert published_messages[0].data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
+
 
 
 def test_config_reader(command, tmp_path):

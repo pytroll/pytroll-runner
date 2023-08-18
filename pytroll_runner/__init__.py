@@ -4,6 +4,7 @@ Example config file:
 
 publisher_config:
   expected_files: /tmp/pytest-of-a001673/pytest-169/test_fake_publisher0/file?.bla
+  output_files_log_regex: "Written output file : (.*.nc)"
   publisher_settings:
     nameservers: false
     port: 1979
@@ -20,6 +21,7 @@ subscriber_config:
 """
 import argparse
 import os
+import re
 from contextlib import closing
 from glob import glob
 from subprocess import PIPE, Popen
@@ -51,10 +53,20 @@ def run_and_publish(config_file):
     preexisting_files = check_existing_files(publisher_config)
 
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
-        for _, mda in run_from_new_subscriber(command_to_call, subscriber_config):
-            message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
-            preexisting_files = check_existing_files(publisher_config)
+        for log_output, mda in run_from_new_subscriber(command_to_call, subscriber_config):
+            try:
+                message = generate_message_from_log_output(publisher_config, mda, log_output)
+            except KeyError:
+                message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
+                preexisting_files = check_existing_files(publisher_config)
             pub.send(message)
+
+
+def generate_message_from_log_output(publisher_config, mda, log_output):
+    """Generate message for the filenames present in the log output."""
+    new_files = re.findall(publisher_config["output_files_log_regex"], str(log_output))
+    message = generate_message_from_new_files(publisher_config, new_files, mda)
+    return message
 
 
 def check_existing_files(publisher_config):
@@ -101,16 +113,18 @@ def run_on_files(command, files):
 
 def generate_message_from_expected_files(pub_config, extra_metadata=None, preexisting_files=None):
     """Generate a message containing the expected files."""
-    metadata = populate_metadata(extra_metadata, pub_config.get("static_metadata", {}))
-
-    dataset = []
-
     new_files = find_new_files(pub_config, preexisting_files or set())
 
+    return generate_message_from_new_files(pub_config, new_files, extra_metadata)
+
+
+def generate_message_from_new_files(pub_config, new_files, extra_metadata):
+    """Generate a message containing the new files."""
+    metadata = populate_metadata(extra_metadata, pub_config.get("static_metadata", {}))
+    dataset = []
     for filepath in sorted(new_files):
         filename = os.path.basename(filepath)
         dataset.append(dict(uid=filename, uri=filepath))
-
     if len(new_files) == 1:
         metadata.update(dataset[0])
         message_type = "file"
