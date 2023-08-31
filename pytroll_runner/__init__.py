@@ -136,9 +136,7 @@ def generate_message_from_new_files(pub_config, new_files, extra_metadata):
 
 def find_new_files(pub_config, preexisting_files):
     """Find new files matching the file pattern."""
-    old_files = preexisting_files
-    all_files = check_existing_files(pub_config)
-    return all_files - old_files
+    return check_existing_files(pub_config) - preexisting_files
 
 
 def populate_metadata(extra_metadata, static_metadata):
