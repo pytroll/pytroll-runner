@@ -4,6 +4,7 @@ Example config file:
 
 publisher_config:
   expected_files: /tmp/pytest-of-a001673/pytest-169/test_fake_publisher0/file?.bla
+  output_files_log_regex: "Written output file : (.*.nc)"
   publisher_settings:
     nameservers: false
     port: 1979
@@ -20,6 +21,7 @@ subscriber_config:
 """
 import argparse
 import os
+import re
 from contextlib import closing
 from glob import glob
 from subprocess import PIPE, Popen
@@ -35,6 +37,7 @@ def main(args=None):
     parsed_args = parse_args(args=args)
     return run_and_publish(parsed_args.config_file)
 
+
 def parse_args(args=None):
     """Parse commandline arguments."""
     parser = argparse.ArgumentParser("Pytroll Runner",
@@ -47,10 +50,29 @@ def parse_args(args=None):
 def run_and_publish(config_file):
     """Run the command and publish the expected files."""
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
+    preexisting_files = check_existing_files(publisher_config)
+
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
-        for _, mda in run_from_new_subscriber(command_to_call, subscriber_config):
-            message = generate_message_from_expected_files(publisher_config, mda)
+        for log_output, mda in run_from_new_subscriber(command_to_call, subscriber_config):
+            try:
+                message = generate_message_from_log_output(publisher_config, mda, log_output)
+            except KeyError:
+                message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
+                preexisting_files = check_existing_files(publisher_config)
             pub.send(message)
+
+
+def generate_message_from_log_output(publisher_config, mda, log_output):
+    """Generate message for the filenames present in the log output."""
+    new_files = re.findall(publisher_config["output_files_log_regex"], str(log_output))
+    message = generate_message_from_new_files(publisher_config, new_files, mda)
+    return message
+
+
+def check_existing_files(publisher_config):
+    """Check for previously generated files."""
+    filepattern = publisher_config["expected_files"]
+    return set(glob(filepattern))
 
 
 def read_config(config_file):
@@ -89,24 +111,32 @@ def run_on_files(command, files):
     return out
 
 
-def generate_message_from_expected_files(pub_config, extra_metadata=None):
+def generate_message_from_expected_files(pub_config, extra_metadata=None, preexisting_files=None):
     """Generate a message containing the expected files."""
-    filepattern = pub_config["expected_files"]
-    metadata = populate_metadata(extra_metadata, pub_config.get("static_metadata", {}))
+    new_files = find_new_files(pub_config, preexisting_files or set())
 
+    return generate_message_from_new_files(pub_config, new_files, extra_metadata)
+
+
+def generate_message_from_new_files(pub_config, new_files, extra_metadata):
+    """Generate a message containing the new files."""
+    metadata = populate_metadata(extra_metadata, pub_config.get("static_metadata", {}))
     dataset = []
-    files = glob(filepattern)
-    for filepath in sorted(files):
+    for filepath in sorted(new_files):
         filename = os.path.basename(filepath)
         dataset.append(dict(uid=filename, uri=filepath))
-
-    if len(files) == 1:
+    if len(new_files) == 1:
         metadata.update(dataset[0])
         message_type = "file"
     else:
         metadata["dataset"] = dataset
         message_type = "dataset"
     return Message(pub_config["topic"], message_type, metadata)
+
+
+def find_new_files(pub_config, preexisting_files):
+    """Find new files matching the file pattern."""
+    return check_existing_files(pub_config) - preexisting_files
 
 
 def populate_metadata(extra_metadata, static_metadata):
