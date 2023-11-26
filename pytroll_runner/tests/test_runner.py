@@ -1,5 +1,6 @@
 """Tests for the pytroll runner."""
 import os
+import logging
 from unittest import mock
 
 import pytest
@@ -43,6 +44,29 @@ echo "2023-08-17T09:48:45.949211 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [
 2023-08-17T09:48:46.589031 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] IPF-AWS-L1 v1.0.1 processor ending with success
 2023-08-17T09:48:46.589041 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Exiting with EXIT CODE 0"
 """
+
+
+log_config_content = """version: 1
+disable_existing_loggers: false
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: DEBUG
+    stream: ext://sys.stdout
+root:
+  level: DEBUG
+  handlers: [console]
+"""
+
+
+@pytest.fixture()
+def log_config_file(tmp_path):
+    """Write a log config file."""
+    log_config = tmp_path / "mylogconfig.yaml"
+    with open(log_config, "w") as fobj:
+        fobj.write(log_config_content)
+
+    return log_config
 
 
 @pytest.fixture()
@@ -266,6 +290,7 @@ def single_file_to_glob(tmp_path):
     pattern = os.fspath(tmp_path / "file?")
     return pattern
 
+
 @pytest.fixture()
 def old_generated_file(tmp_path):
     """Create a single file to glob."""
@@ -276,7 +301,7 @@ def old_generated_file(tmp_path):
     return filename
 
 
-def test_run_and_publish(tmp_path, command_bla, files_to_glob):
+def test_run_and_publish(caplog, tmp_path, command_bla, files_to_glob):
     """Test run and publish."""
     sub_config = dict(nameserver=False, addresses=["ipc://bla"])
     pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
@@ -294,12 +319,17 @@ def test_run_and_publish(tmp_path, command_bla, files_to_glob):
     data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
     messages = [Message("some_topic", "dataset", data=data)]
 
-    with patched_subscriber_recv(messages):
-        with patched_publisher() as published_messages:
-            run_and_publish(yaml_file)
-            assert len(published_messages) == 1
-            for ds, filename in zip(published_messages[0].data["dataset"], some_files):
-                assert ds["uid"] == filename + ".bla"
+    with caplog.at_level(logging.DEBUG):
+        with patched_subscriber_recv(messages):
+            with patched_publisher() as published_messages:
+                run_and_publish(yaml_file)
+                assert len(published_messages) == 1
+                for ds, filename in zip(published_messages[0].data["dataset"], some_files):
+                    assert ds["uid"] == filename + ".bla"
+
+    assert "Subscriber config settings: " in caplog.text
+    assert "addresses = ['ipc://bla']" in caplog.text
+    assert "nameserver = False" in caplog.text
 
 
 def test_run_and_publish_does_not_pick_old_files(tmp_path, command_bla, files_to_glob, old_generated_file):
@@ -370,7 +400,6 @@ def test_run_and_publish_with_files_from_log(tmp_path, command_aws):
             assert published_messages[0].data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
 
 
-
 def test_config_reader(command, tmp_path):
     """Test the config reader."""
     sub_config = dict(nameserver=False, addresses=["ipc://bla"])
@@ -383,6 +412,7 @@ def test_config_reader(command, tmp_path):
     with open(yaml_file, "w") as fd:
         fd.write(yaml.dump(test_config))
     command_to_call, subscriber_config, publisher_config = read_config(yaml_file)
+
     assert subscriber_config == sub_config
     assert command_to_call == command_path
     assert publisher_config == pub_config
@@ -398,3 +428,53 @@ def test_main_crashes_when_config_file_missing():
     """Test that main crashes when the config file is missing."""
     with pytest.raises(FileNotFoundError):
         main(["moose_config.yaml"])
+
+
+def test_main_parse_log_configfile(tmp_path, command, log_config_file):
+    """Test that when parsing a log-config yaml file logging is being setup"""
+    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
+    pub_settings = dict(nameserver=False, name='blabla')
+    pub_config = dict(topic="/hi/there/",
+                      expected_files='*.bufr',
+                      publisher_settings=pub_settings)
+    command_path = os.fspath(command)
+    test_config = dict(subscriber_config=sub_config,
+                       script=command_path,
+                       publisher_config=pub_config)
+
+    yaml_file = tmp_path / "config.yaml"
+    with open(yaml_file, "w") as fd:
+        fd.write(yaml.dump(test_config))
+
+    messages = []
+    with patched_subscriber_recv(messages):
+        with patched_publisher() as published_messages:
+            main([str(yaml_file), '-l', str(log_config_file)])
+
+    assert isinstance(logging.getLogger('').handlers[0], logging.StreamHandler)
+
+
+def test_main_is_logging(caplog, tmp_path, command):
+    """Test that main is logging."""
+    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
+    pub_settings = dict(nameserver=False, name='blabla')
+    pub_config = dict(topic="/hi/there/",
+                      expected_files='*.bufr',
+                      publisher_settings=pub_settings)
+    command_path = os.fspath(command)
+    test_config = dict(subscriber_config=sub_config,
+                       script=command_path,
+                       publisher_config=pub_config)
+
+    yaml_file = tmp_path / "config.yaml"
+    with open(yaml_file, "w") as fd:
+        fd.write(yaml.dump(test_config))
+
+    messages = []
+    with caplog.at_level(logging.INFO):
+        with patched_subscriber_recv(messages):
+            with patched_publisher() as published_messages:
+                main([str(yaml_file)])
+
+    expected_msg = "Start generic"
+    assert expected_msg in caplog.text
