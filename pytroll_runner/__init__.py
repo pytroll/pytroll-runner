@@ -20,6 +20,8 @@ subscriber_config:
 
 """
 import argparse
+import logging
+import logging.config
 import os
 import re
 from contextlib import closing
@@ -31,25 +33,46 @@ from posttroll.message import Message
 from posttroll.publisher import create_publisher_from_dict_config
 from posttroll.subscriber import create_subscriber_from_dict_config
 
+logger = logging.getLogger('pytroll-runner')
+
 
 def main(args=None):
     """Main script."""
     parsed_args = parse_args(args=args)
+    setup_logging(parsed_args.log_config)
+
+    logger.info("Start generic pytroll-runner")
     return run_and_publish(parsed_args.config_file)
 
 
+def setup_logging(config_file):
+    """Setup the logging from a log config yaml file."""
+    if config_file is not None:
+        with open(config_file) as fd:
+            log_dict = yaml.safe_load(fd.read())
+            logging.config.dictConfig(log_dict)
+            return
+
+
 def parse_args(args=None):
-    """Parse commandline arguments."""
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser("Pytroll Runner",
                                      description="Automate third party software in a pytroll environment")
     parser.add_argument("config_file",
                         help="The configuration file to run on.")
+    parser.add_argument("-l", "--log_config",
+                        help="The log configuration yaml file.",
+                        default=None)
     return parser.parse_args(args)
 
 
 def run_and_publish(config_file):
     """Run the command and publish the expected files."""
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
+    logger.debug("Subscriber config settings: ")
+    for item in subscriber_config:
+        logger.debug(f"{item} = {str(subscriber_config[item])}")
+
     preexisting_files = check_existing_files(publisher_config)
 
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
@@ -84,6 +107,7 @@ def read_config(config_file):
 
 def run_from_new_subscriber(command, subscriber_settings):
     """Run the command with files gotten from a new subscriber."""
+    logger.debug("Run from new subscriber...")
     with closing(create_subscriber_from_dict_config(subscriber_settings)) as sub:
         return run_on_messages(command, sub.recv())
 
@@ -106,6 +130,7 @@ def run_on_files(command, files):
     """Run the command of files."""
     if not files:
         return
+    logger.info(f"Start running command {command} on files {files}")
     process = Popen([os.fspath(command), *files], stdout=PIPE)
     out, _ = process.communicate()
     return out
