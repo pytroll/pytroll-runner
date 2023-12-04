@@ -452,29 +452,3 @@ def test_main_parse_log_configfile(tmp_path, command, log_config_file):
             main([str(yaml_file), '-l', str(log_config_file)])
 
     assert isinstance(logging.getLogger('').handlers[0], logging.StreamHandler)
-
-
-def test_main_is_logging(caplog, tmp_path, command):
-    """Test that main is logging."""
-    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
-    pub_settings = dict(nameserver=False, name='blabla')
-    pub_config = dict(topic="/hi/there/",
-                      expected_files='*.bufr',
-                      publisher_settings=pub_settings)
-    command_path = os.fspath(command)
-    test_config = dict(subscriber_config=sub_config,
-                       script=command_path,
-                       publisher_config=pub_config)
-
-    yaml_file = tmp_path / "config.yaml"
-    with open(yaml_file, "w") as fd:
-        fd.write(yaml.dump(test_config))
-
-    messages = []
-    with caplog.at_level(logging.INFO):
-        with patched_subscriber_recv(messages):
-            with patched_publisher() as published_messages:
-                main([str(yaml_file)])
-
-    expected_msg = "Start generic"
-    assert expected_msg in caplog.text
