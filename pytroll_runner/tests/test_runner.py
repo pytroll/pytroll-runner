@@ -431,11 +431,11 @@ def test_main_crashes_when_config_file_missing():
 
 
 def test_main_parse_log_configfile(tmp_path, command, log_config_file):
-    """Test that when parsing a log-config yaml file logging is being setup"""
+    """Test that when parsing a log-config yaml file logging is being setup."""
     sub_config = dict(nameserver=False, addresses=["ipc://bla"])
-    pub_settings = dict(nameserver=False, name='blabla')
+    pub_settings = dict(nameservers=False, name="blabla", port=2009)
     pub_config = dict(topic="/hi/there/",
-                      expected_files='*.bufr',
+                      expected_files="*.bufr",
                       publisher_settings=pub_settings)
     command_path = os.fspath(command)
     test_config = dict(subscriber_config=sub_config,
@@ -448,7 +448,7 @@ def test_main_parse_log_configfile(tmp_path, command, log_config_file):
 
     messages = []
     with patched_subscriber_recv(messages):
-        with patched_publisher() as published_messages:
-            main([str(yaml_file), '-l', str(log_config_file)])
+        with patched_publisher():
+            main([str(yaml_file), "-l", str(log_config_file)])
 
-    assert isinstance(logging.getLogger('').handlers[0], logging.StreamHandler)
+    assert isinstance(logging.getLogger("").handlers[0], logging.StreamHandler)

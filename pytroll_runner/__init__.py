@@ -33,7 +33,7 @@ from posttroll.message import Message
 from posttroll.publisher import create_publisher_from_dict_config
 from posttroll.subscriber import create_subscriber_from_dict_config
 
-logger = logging.getLogger('pytroll-runner')
+logger = logging.getLogger("pytroll-runner")
 
 
 def main(args=None):
@@ -76,6 +76,7 @@ def run_and_publish(config_file):
     preexisting_files = check_existing_files(publisher_config)
 
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
+        pub.start()
         for log_output, mda in run_from_new_subscriber(command_to_call, subscriber_config):
             try:
                 message = generate_message_from_log_output(publisher_config, mda, log_output)
