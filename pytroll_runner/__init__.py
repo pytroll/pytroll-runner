@@ -109,7 +109,7 @@ def run_from_new_subscriber(command, subscriber_settings):
     """Run the command with files gotten from a new subscriber."""
     logger.debug("Run from new subscriber...")
     with closing(create_subscriber_from_dict_config(subscriber_settings)) as sub:
-        return run_on_messages(command, sub.recv())
+        yield from run_on_messages(command, sub.recv())
 
 
 def run_on_messages(command, messages):
