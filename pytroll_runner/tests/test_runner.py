@@ -324,7 +324,8 @@ def test_run_and_publish(caplog, tmp_path, command_bla, files_to_glob):
             with patched_publisher() as published_messages:
                 run_and_publish(yaml_file)
                 assert len(published_messages) == 1
-                for ds, filename in zip(published_messages[0].data["dataset"], some_files):
+                message = Message(rawstr=published_messages[0])
+                for ds, filename in zip(message.data["dataset"], some_files):
                     assert ds["uid"] == filename + ".bla"
 
     assert "Subscriber config settings: " in caplog.text
@@ -354,7 +355,7 @@ def test_run_and_publish_does_not_pick_old_files(tmp_path, command_bla, files_to
         with patched_publisher() as published_messages:
             run_and_publish(yaml_file)
             assert len(published_messages) == 1
-            assert published_messages[0].data["uid"] == "file1.bla"
+            assert Message(rawstr=published_messages[0]).data["uid"] == "file1.bla"
 
     some_files = ["file2"]
     data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
@@ -368,8 +369,8 @@ def test_run_and_publish_does_not_pick_old_files(tmp_path, command_bla, files_to
         with patched_publisher() as published_messages:
             run_and_publish(yaml_file)
             assert len(published_messages) == 2
-            assert published_messages[0].data["uid"] == "file2.bla"
-            assert published_messages[1].data["uid"] == "file3.bla"
+            assert Message(rawstr=published_messages[0]).data["uid"] == "file2.bla"
+            assert Message(rawstr=published_messages[1]).data["uid"] == "file3.bla"
 
 
 def test_run_and_publish_with_files_from_log(tmp_path, command_aws):
@@ -396,7 +397,8 @@ def test_run_and_publish_with_files_from_log(tmp_path, command_aws):
         with patched_publisher() as published_messages:
             run_and_publish(yaml_file)
             assert len(published_messages) == 1
-            assert published_messages[0].data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
+            message = Message(rawstr=published_messages[0])
+            assert message.data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
 
 
 def test_run_and_publish_with_faulty_config(tmp_path, command_aws):
