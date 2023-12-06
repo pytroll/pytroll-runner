@@ -83,7 +83,8 @@ def run_and_publish(config_file):
             except KeyError:
                 message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
                 preexisting_files = check_existing_files(publisher_config)
-            pub.send(message)
+            logger.debug(f"Sending message = {message}")
+            pub.send(str(message))
 
 
 def generate_message_from_log_output(publisher_config, mda, log_output):
@@ -134,6 +135,7 @@ def run_on_files(command, files):
     logger.info(f"Start running command {command} on files {files}")
     process = Popen([os.fspath(command), *files], stdout=PIPE)
     out, _ = process.communicate()
+    logger.debug(f"After having run the script: {out}")
     return out
 
 
