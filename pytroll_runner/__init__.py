@@ -3,6 +3,7 @@
 Example config file:
 
 publisher_config:
+  # at least one of the following two needs to be provided. If both are present, expected_files will take precedence
   expected_files: /tmp/pytest-of-a001673/pytest-169/test_fake_publisher0/file?.bla
   output_files_log_regex: "Written output file : (.*.nc)"
   publisher_settings:
@@ -24,7 +25,7 @@ import logging
 import logging.config
 import os
 import re
-from contextlib import closing
+from contextlib import closing, suppress
 from glob import glob
 from subprocess import PIPE, Popen
 
@@ -69,11 +70,8 @@ def parse_args(args=None):
 def run_and_publish(config_file):
     """Run the command and publish the expected files."""
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
-    logger.debug("Subscriber config settings: ")
-    for item in subscriber_config:
-        logger.debug(f"{item} = {str(subscriber_config[item])}")
-
-    preexisting_files = check_existing_files(publisher_config)
+    with suppress(KeyError):
+        preexisting_files = check_existing_files(publisher_config)
 
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
         pub.start()
@@ -104,7 +102,23 @@ def read_config(config_file):
     """Read the configuration file."""
     with open(config_file) as fd:
         config = yaml.safe_load(fd.read())
-    return config["script"], config["subscriber_config"], config["publisher_config"]
+    return validate_config(config)
+
+
+def validate_config(config):
+    """Validate the configuration file."""
+    publisher_config = config["publisher_config"]
+    if "output_files_log_regex" not in publisher_config and "expected_files" not in publisher_config:
+        raise KeyError("Missing ways to identify output files. "
+                                    "Either provide 'expected_files' or "
+                                    "'output_files_log_regex' in the config file.")
+
+    subscriber_config = config["subscriber_config"]
+    logger.debug("Subscriber config settings: ")
+    for item, val in subscriber_config.items():
+        logger.debug(f"{item} = {str(val)}")
+
+    return config["script"], subscriber_config, publisher_config
 
 
 def run_from_new_subscriber(command, subscriber_settings):
@@ -133,7 +147,7 @@ def run_on_files(command, files):
     if not files:
         return
     logger.info(f"Start running command {command} on files {files}")
-    process = Popen([os.fspath(command), *files], stdout=PIPE)
+    process = Popen([os.fspath(command), *files], stdout=PIPE)  # noqa: S603
     out, _ = process.communicate()
     logger.debug(f"After having run the script: {out}")
     return out

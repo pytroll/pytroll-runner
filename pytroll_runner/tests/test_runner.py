@@ -1,6 +1,6 @@
 """Tests for the pytroll runner."""
-import os
 import logging
+import os
 from unittest import mock
 
 import pytest
@@ -150,7 +150,6 @@ def test_run_starts_and_stops_subscriber(command):
         subscriber_creator.assert_called_once_with(subscriber_settings)
         subscriber_creator.return_value.close.assert_called_once()
 
-
 def test_run_on_subscriber(command):
     """Test that we run using a subscriber."""
     some_files = ["file1", "file2", "file3"]
@@ -160,6 +159,7 @@ def test_run_on_subscriber(command):
         for i, (out, mda) in enumerate(run_from_new_subscriber(command, subscriber_settings)):
             assert out.decode().strip() == "Got " + some_files[i]
             assert mda["sensor"] == "thermometer"
+    assert i == 2
 
 
 def test_find_files_and_generate_message(tmp_path):
@@ -376,7 +376,6 @@ def test_run_and_publish_with_files_from_log(tmp_path, command_aws):
     """Test run and publish."""
     sub_config = dict(nameserver=False, addresses=["ipc://bla"])
     pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
-                      expected_files=os.fspath(tmp_path / "file?.bla"),
                       topic="/hi/there",
                       output_files_log_regex="Written output file : (.*.nc)")
     command_path = os.fspath(command_aws)
@@ -400,10 +399,33 @@ def test_run_and_publish_with_files_from_log(tmp_path, command_aws):
             assert published_messages[0].data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
 
 
+def test_run_and_publish_with_faulty_config(tmp_path, command_aws):
+    """Test run and publish."""
+    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
+    pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
+                      topic="/hi/there")
+    command_path = os.fspath(command_aws)
+    test_config = dict(subscriber_config=sub_config,
+                       script=command_path,
+                       publisher_config=pub_config)
+    yaml_file = tmp_path / "config.yaml"
+    with open(yaml_file, "w") as fd:
+        fd.write(yaml.dump(test_config))
+
+    some_files = ["file1"]
+    data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
+    first_message = Message("some_topic", "dataset", data=data)
+
+    with patched_subscriber_recv([first_message]):
+        with patched_publisher():
+            with pytest.raises(KeyError, match="Missing ways to identify output files.*"):
+                run_and_publish(yaml_file)
+
+
 def test_config_reader(command, tmp_path):
     """Test the config reader."""
     sub_config = dict(nameserver=False, addresses=["ipc://bla"])
-    pub_config = dict(nameserver=False, topic="/hi/there/")
+    pub_config = dict(nameserver=False, topic="/hi/there/", output_files_log_regex="Written output file : (.*.nc)")
     command_path = os.fspath(command)
     test_config = dict(subscriber_config=sub_config,
                        script=command_path,
