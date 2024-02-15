@@ -91,11 +91,13 @@ def run_and_publish(config_file, message_file=None):
             logger.debug(f"Sending message = {message}")
             pub.send(str(message))
 
+
 def run_from_message_file(command_to_call, message_file):
     """Run the command on message file."""
     with open(message_file) as fd:
         messages = (Message(rawstr=line) for line in fd if line)
         yield from run_on_messages(command_to_call, messages)
+
 
 def check_existing_files(publisher_config):
     """Check for previously generated files."""
