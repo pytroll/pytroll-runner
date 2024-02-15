@@ -43,7 +43,7 @@ def main(args=None):
     setup_logging(parsed_args.log_config)
 
     logger.info("Start generic pytroll-runner")
-    return run_and_publish(parsed_args.config_file)
+    return run_and_publish(parsed_args.config_file, parsed_args.message_file)
 
 
 def setup_logging(config_file):
@@ -64,10 +64,13 @@ def parse_args(args=None):
     parser.add_argument("-l", "--log_config",
                         help="The log configuration yaml file.",
                         default=None)
+    parser.add_argument("-m", "--message-file",
+                        help="A file containing messages to process.",
+                        default=None)
     return parser.parse_args(args)
 
 
-def run_and_publish(config_file):
+def run_and_publish(config_file, message_file=None):
     """Run the command and publish the expected files."""
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
     with suppress(KeyError):
@@ -75,7 +78,11 @@ def run_and_publish(config_file):
 
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
         pub.start()
-        for log_output, mda in run_from_new_subscriber(command_to_call, subscriber_config):
+        if message_file is None:
+            gen = run_from_new_subscriber(command_to_call, subscriber_config)
+        else:
+            gen = run_from_message_file(command_to_call, message_file)
+        for log_output, mda in gen:
             try:
                 message = generate_message_from_log_output(publisher_config, mda, log_output)
             except KeyError:
@@ -84,13 +91,12 @@ def run_and_publish(config_file):
             logger.debug(f"Sending message = {message}")
             pub.send(str(message))
 
-
-def generate_message_from_log_output(publisher_config, mda, log_output):
-    """Generate message for the filenames present in the log output."""
-    new_files = re.findall(publisher_config["output_files_log_regex"], str(log_output))
-    message = generate_message_from_new_files(publisher_config, new_files, mda)
-    return message
-
+def run_from_message_file(command_to_call, message_file):
+    """Run the command on message file."""
+    with open(message_file) as fd:
+        messages = [Message(rawstr=line) for line in fd if line]
+    gen = run_on_messages(command_to_call, messages)
+    return gen
 
 def check_existing_files(publisher_config):
     """Check for previously generated files."""
@@ -151,6 +157,13 @@ def run_on_files(command, files):
     out, _ = process.communicate()
     logger.debug(f"After having run the script: {out}")
     return out
+
+
+def generate_message_from_log_output(publisher_config, mda, log_output):
+    """Generate message for the filenames present in the log output."""
+    new_files = re.findall(publisher_config["output_files_log_regex"], str(log_output))
+    message = generate_message_from_new_files(publisher_config, new_files, mda)
+    return message
 
 
 def generate_message_from_expected_files(pub_config, extra_metadata=None, preexisting_files=None):
