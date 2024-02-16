@@ -156,6 +156,12 @@ def test_run_on_files_passes_files_to_script(command):
     out = run_on_files(command, some_files)
     assert out.decode().strip() == "Got " + " ".join(some_files)
 
+def test_run_on_files_accepts_scripts_with_args(command):
+    """Test that the script is called."""
+    some_files = ["file1", "file2", "file3"]
+    out = run_on_files(str(command) + " -f -v -h", some_files)
+    assert out.decode().strip() == "Got -f -v -h " + " ".join(some_files)
+
 
 def test_run_on_messages_passes_files_to_script(command):
     """Test that the script is called."""
