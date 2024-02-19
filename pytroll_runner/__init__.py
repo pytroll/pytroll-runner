@@ -88,6 +88,9 @@ def run_and_publish(config_file):
 def generate_message_from_log_output(publisher_config, mda, log_output):
     """Generate message for the filenames present in the log output."""
     new_files = re.findall(publisher_config["output_files_log_regex"], str(log_output))
+    logger.debug(f"Output files identified = str{new_files}")
+    if len(new_files) == 0:
+        logger.warning("No output files to publish identified!")
     message = generate_message_from_new_files(publisher_config, new_files, mda)
     return message
 
@@ -110,8 +113,8 @@ def validate_config(config):
     publisher_config = config["publisher_config"]
     if "output_files_log_regex" not in publisher_config and "expected_files" not in publisher_config:
         raise KeyError("Missing ways to identify output files. "
-                                    "Either provide 'expected_files' or "
-                                    "'output_files_log_regex' in the config file.")
+                       "Either provide 'expected_files' or "
+                       "'output_files_log_regex' in the config file.")
 
     subscriber_config = config["subscriber_config"]
     logger.debug("Subscriber config settings: ")
