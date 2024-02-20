@@ -87,6 +87,8 @@ def run_and_publish(config_file):
 
 def generate_message_from_log_output(publisher_config, mda, log_output):
     """Generate message for the filenames present in the log output."""
+    logger.debug(str(log_output))
+    logger.debug(str(publisher_config["output_files_log_regex"]))
     new_files = re.findall(publisher_config["output_files_log_regex"], str(log_output))
     logger.debug(f"Output files identified = str{new_files}")
     if len(new_files) == 0:
@@ -152,6 +154,7 @@ def run_on_files(command, files):
     logger.info(f"Start running command {command} on files {files}")
     process = Popen([os.fspath(command), *files], stdout=PIPE)  # noqa: S603
     out, _ = process.communicate()
+    out = out.decode('utf-8')
     logger.debug(f"After having run the script: {out}")
     return out
 
