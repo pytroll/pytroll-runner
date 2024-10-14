@@ -12,7 +12,9 @@ publisher_config:
   static_metadata:
     sensor: thermometer
   topic: /hi/there
-script: /tmp/pytest-of-a001673/pytest-169/test_fake_publisher0/myscript_bla.sh
+script:
+  command: /tmp/pytest-of-a001673/pytest-169/test_fake_publisher0/myscript_bla.sh
+  workers: 4
 subscriber_config:
   addresses:
   - ipc://bla
@@ -26,7 +28,9 @@ import logging.config
 import os
 import re
 from contextlib import closing, suppress
+from functools import partial
 from glob import glob
+from multiprocessing.pool import ThreadPool
 from subprocess import PIPE, Popen
 
 import yaml
@@ -130,16 +134,33 @@ def run_from_new_subscriber(command, subscriber_settings):
 
 def run_on_messages(command, messages):
     """Run the command on files from messages."""
+    try:
+        num_workers = command.get("workers", 1)
+    except AttributeError:
+        num_workers = 1
+    pool = ThreadPool(num_workers)
+    run_command_on_message = partial(run_on_single_message, command)
+
+    yield from pool.imap_unordered(run_command_on_message, select_messages(messages))
+
+
+def select_messages(messages):
+    """Select only valid messages."""
     accepted_message_types = ["file", "dataset"]
     for message in messages:
         if message.type not in accepted_message_types:
             continue
-        try:  # file
-            files = [message.data["uri"]]
-        except KeyError:  # dataset
-            files = []
-            files.extend(info["uri"] for info in message.data["dataset"])
-        yield run_on_files(command, files), message.data
+        yield message
+
+
+def run_on_single_message(command, message):
+    """Run the command on files from message."""
+    try:  # file
+        files = [message.data["uri"]]
+    except KeyError:  # dataset
+        files = []
+        files.extend(info["uri"] for info in message.data["dataset"])
+    return run_on_files(command, files), message.data
 
 
 def run_on_files(command, files):
@@ -147,7 +168,11 @@ def run_on_files(command, files):
     if not files:
         return
     logger.info(f"Start running command {command} on files {files}")
-    process = Popen([os.fspath(command), *files], stdout=PIPE)  # noqa: S603
+    try:
+        command_to_call = command["command"]
+    except TypeError:
+        command_to_call = command
+    process = Popen([os.fspath(command_to_call), *files], stdout=PIPE)  # noqa: S603
     out, _ = process.communicate()
     logger.debug(f"After having run the script: {out}")
     return out
