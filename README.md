@@ -13,7 +13,9 @@ The configuration file is made of three sections.
 
 ### `script`
 
-Full path script to run
+A dictionary with:
+- `command` Full path script to run
+- optionally `workers` The number of workers to use for parallel processing of messages. Defaults to 1.
 
 ### `subscriber_config`
 
