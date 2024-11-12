@@ -91,6 +91,27 @@ def command_bla(tmp_path):
 
 
 @pytest.fixture
+def config_bla(tmp_path, command_bla):
+    """Make a config."""
+    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
+    pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
+                      expected_files=os.fspath(tmp_path / "file?.bla"),
+                      topic="/hi/there")
+    command_path = os.fspath(command_bla)
+    test_config = dict(subscriber_config=sub_config,
+                       script=command_path,
+                       publisher_config=pub_config)
+
+    return test_config
+
+
+@pytest.fixture
+def config_file_bla(tmp_path, config_bla):
+    """Make a configuration file."""
+    return write_config_file(tmp_path, config_bla)
+
+
+@pytest.fixture
 def command_aws(tmp_path):
     """Make a command script that outputs a log with an output filename."""
     command_file = tmp_path / "myscript_aws.sh"
@@ -100,11 +121,47 @@ def command_aws(tmp_path):
     return command_file
 
 
+@pytest.fixture
+def config_aws(command_aws):
+    """Configuration to run aws script."""
+    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
+    pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
+                      topic="/hi/there",
+                      output_files_log_regex="Written output file : (.*.nc)")
+    command_path = os.fspath(command_aws)
+    test_config = dict(subscriber_config=sub_config,
+                       script=command_path,
+                       publisher_config=pub_config)
+
+    return test_config
+
+
+@pytest.fixture
+def config_file_aws(tmp_path, config_aws):
+    """Make a configuration file."""
+    return write_config_file(tmp_path, config_aws)
+
+
+def write_config_file(tmp_path, config):
+    """Write a configturation file."""
+    yaml_file = tmp_path / "config.yaml"
+    with open(yaml_file, "w") as fd:
+        fd.write(yaml.dump(config))
+    return yaml_file
+
+
+
 def test_run_on_files_passes_files_to_script(command):
     """Test that the script is called."""
     some_files = ["file1", "file2", "file3"]
     out = run_on_files(command, some_files)
     assert out.decode().strip() == "Got " + " ".join(some_files)
+
+def test_run_on_files_accepts_scripts_with_args(command):
+    """Test that the script is called."""
+    some_files = ["file1", "file2", "file3"]
+    out = run_on_files(str(command) + " -f -v -h", some_files)
+    assert out.decode().strip() == "Got -f -v -h " + " ".join(some_files)
 
 
 def test_run_on_messages_passes_files_to_script(command):
@@ -302,20 +359,8 @@ def old_generated_file(tmp_path):
     return filename
 
 
-def test_run_and_publish(caplog, tmp_path, command_bla, files_to_glob):
+def test_run_and_publish(caplog, tmp_path, config_file_bla, files_to_glob):
     """Test run and publish."""
-    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
-    pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
-                      expected_files=os.fspath(tmp_path / "file?.bla"),
-                      topic="/hi/there")
-    command_path = os.fspath(command_bla)
-    test_config = dict(subscriber_config=sub_config,
-                       script=command_path,
-                       publisher_config=pub_config)
-    yaml_file = tmp_path / "config.yaml"
-    with open(yaml_file, "w") as fd:
-        fd.write(yaml.dump(test_config))
-
     some_files = ["file1", "file2", "file3"]
     data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
     messages = [Message("some_topic", "dataset", data=data)]
@@ -323,7 +368,7 @@ def test_run_and_publish(caplog, tmp_path, command_bla, files_to_glob):
     with caplog.at_level(logging.DEBUG):
         with patched_subscriber_recv(messages):
             with patched_publisher() as published_messages:
-                run_and_publish(yaml_file)
+                run_and_publish(config_file_bla)
                 assert len(published_messages) == 1
                 message = Message(rawstr=published_messages[0])
                 for ds, filename in zip(message.data["dataset"], some_files):
@@ -334,27 +379,15 @@ def test_run_and_publish(caplog, tmp_path, command_bla, files_to_glob):
     assert "nameserver = False" in caplog.text
 
 
-def test_run_and_publish_does_not_pick_old_files(tmp_path, command_bla, files_to_glob, old_generated_file):
+def test_run_and_publish_does_not_pick_old_files(tmp_path, config_file_bla, files_to_glob, old_generated_file):
     """Test run and publish."""
-    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
-    pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
-                      expected_files=os.fspath(tmp_path / "file?.bla"),
-                      topic="/hi/there")
-    command_path = os.fspath(command_bla)
-    test_config = dict(subscriber_config=sub_config,
-                       script=command_path,
-                       publisher_config=pub_config)
-    yaml_file = tmp_path / "config.yaml"
-    with open(yaml_file, "w") as fd:
-        fd.write(yaml.dump(test_config))
-
     some_files = ["file1"]
     data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
     first_message = Message("some_topic", "dataset", data=data)
 
     with patched_subscriber_recv([first_message]):
         with patched_publisher() as published_messages:
-            run_and_publish(yaml_file)
+            run_and_publish(config_file_bla)
             assert len(published_messages) == 1
             assert Message(rawstr=published_messages[0]).data["uid"] == "file1.bla"
 
@@ -368,26 +401,14 @@ def test_run_and_publish_does_not_pick_old_files(tmp_path, command_bla, files_to
 
     with patched_subscriber_recv([second_message, third_message]):
         with patched_publisher() as published_messages:
-            run_and_publish(yaml_file)
+            run_and_publish(config_file_bla)
             assert len(published_messages) == 2
             assert Message(rawstr=published_messages[0]).data["uid"] == "file2.bla"
             assert Message(rawstr=published_messages[1]).data["uid"] == "file3.bla"
 
 
-def test_run_and_publish_with_files_from_log(tmp_path, command_aws):
+def test_run_and_publish_with_files_from_log(tmp_path, config_file_aws):
     """Test run and publish."""
-    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
-    pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
-                      topic="/hi/there",
-                      output_files_log_regex="Written output file : (.*.nc)")
-    command_path = os.fspath(command_aws)
-    test_config = dict(subscriber_config=sub_config,
-                       script=command_path,
-                       publisher_config=pub_config)
-    yaml_file = tmp_path / "config.yaml"
-    with open(yaml_file, "w") as fd:
-        fd.write(yaml.dump(test_config))
-
     some_files = ["file1"]
     data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
     first_message = Message("some_topic", "dataset", data=data)
@@ -396,24 +417,16 @@ def test_run_and_publish_with_files_from_log(tmp_path, command_aws):
 
     with patched_subscriber_recv([first_message]):
         with patched_publisher() as published_messages:
-            run_and_publish(yaml_file)
+            run_and_publish(config_file_aws)
             assert len(published_messages) == 1
             message = Message(rawstr=published_messages[0])
             assert message.data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
 
 
-def test_run_and_publish_with_faulty_config(tmp_path, command_aws):
+def test_run_and_publish_with_faulty_config(tmp_path, config_aws):
     """Test run and publish."""
-    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
-    pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
-                      topic="/hi/there")
-    command_path = os.fspath(command_aws)
-    test_config = dict(subscriber_config=sub_config,
-                       script=command_path,
-                       publisher_config=pub_config)
-    yaml_file = tmp_path / "config.yaml"
-    with open(yaml_file, "w") as fd:
-        fd.write(yaml.dump(test_config))
+    config_aws["publisher_config"].pop("output_files_log_regex")
+    yaml_file = write_config_file(tmp_path, config_aws)
 
     some_files = ["file1"]
     data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
@@ -428,7 +441,9 @@ def test_run_and_publish_with_faulty_config(tmp_path, command_aws):
 def test_config_reader(command, tmp_path):
     """Test the config reader."""
     sub_config = dict(nameserver=False, addresses=["ipc://bla"])
-    pub_config = dict(nameserver=False, topic="/hi/there/", output_files_log_regex="Written output file : (.*.nc)")
+    pub_config = dict(publisher_settings=dict(nameserver=False, port=1979),
+                      topic="/hi/there/",
+                      output_files_log_regex="Written output file : (.*.nc)")
     command_path = os.fspath(command)
     test_config = dict(subscriber_config=sub_config,
                        script=command_path,
@@ -455,26 +470,12 @@ def test_main_crashes_when_config_file_missing():
         main(["moose_config.yaml"])
 
 
-def test_main_parse_log_configfile(tmp_path, command, log_config_file):
+def test_main_parse_log_configfile(config_file_aws,log_config_file):
     """Test that when parsing a log-config yaml file logging is being setup."""
-    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
-    pub_settings = dict(nameservers=False, name="blabla", port=2009)
-    pub_config = dict(topic="/hi/there/",
-                      expected_files="*.bufr",
-                      publisher_settings=pub_settings)
-    command_path = os.fspath(command)
-    test_config = dict(subscriber_config=sub_config,
-                       script=command_path,
-                       publisher_config=pub_config)
-
-    yaml_file = tmp_path / "config.yaml"
-    with open(yaml_file, "w") as fd:
-        fd.write(yaml.dump(test_config))
-
     messages = []
     with patched_subscriber_recv(messages):
         with patched_publisher():
-            main([str(yaml_file), "-l", str(log_config_file)])
+            main([str(config_file_aws), "-l", str(log_config_file)])
 
     assert isinstance(logging.getLogger("").handlers[0], logging.StreamHandler)
 
@@ -512,3 +513,21 @@ def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, comman
             assert len(published_messages) == 10
             res_files = [Message(rawstr=msg).data["uid"] for msg in published_messages]
             assert res_files != sorted(res_files)
+
+def test_run_and_publish_from_message_file(tmp_path, config_file_aws):
+    """Test run and publish."""
+    some_files = ["file1"]
+    data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
+    first_message = Message("some_topic", "dataset", data=data)
+
+    message_file = tmp_path / "first.msg"
+    with open(message_file, mode="w") as fd:
+        fd.write(str(first_message))
+    expected = "W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc"
+
+    with patched_publisher() as published_messages:
+        main([str(config_file_aws), "-m", str(message_file)])
+        assert len(published_messages) == 1
+        message = Message(rawstr=published_messages[0])
+
+        assert message.data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
