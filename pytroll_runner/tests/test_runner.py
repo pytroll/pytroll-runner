@@ -89,7 +89,7 @@ def command_bla(tmp_path):
     return command_file
 
 
-@pytest.fixture()
+@pytest.fixture
 def config_bla(tmp_path, command_bla):
     """Make a config."""
     sub_config = dict(nameserver=False, addresses=["ipc://bla"])
@@ -104,13 +104,13 @@ def config_bla(tmp_path, command_bla):
     return test_config
 
 
-@pytest.fixture()
+@pytest.fixture
 def config_file_bla(tmp_path, config_bla):
     """Make a configuration file."""
     return write_config_file(tmp_path, config_bla)
 
 
-@pytest.fixture()
+@pytest.fixture
 def command_aws(tmp_path):
     """Make a command script that outputs a log with an output filename."""
     command_file = tmp_path / "myscript_aws.sh"
@@ -120,7 +120,7 @@ def command_aws(tmp_path):
     return command_file
 
 
-@pytest.fixture()
+@pytest.fixture
 def config_aws(command_aws):
     """Configuration to run aws script."""
     sub_config = dict(nameserver=False, addresses=["ipc://bla"])
@@ -135,7 +135,7 @@ def config_aws(command_aws):
     return test_config
 
 
-@pytest.fixture()
+@pytest.fixture
 def config_file_aws(tmp_path, config_aws):
     """Make a configuration file."""
     return write_config_file(tmp_path, config_aws)
