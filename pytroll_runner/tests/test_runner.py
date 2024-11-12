@@ -59,7 +59,7 @@ root:
 """
 
 
-@pytest.fixture()
+@pytest.fixture
 def log_config_file(tmp_path):
     """Write a log config file."""
     log_config = tmp_path / "mylogconfig.yaml"
@@ -69,7 +69,7 @@ def log_config_file(tmp_path):
     return log_config
 
 
-@pytest.fixture()
+@pytest.fixture
 def command(tmp_path):
     """Make a command script that just prints out the files it got."""
     command_file = tmp_path / "myscript.sh"
@@ -79,7 +79,7 @@ def command(tmp_path):
     return command_file
 
 
-@pytest.fixture()
+@pytest.fixture
 def command_bla(tmp_path):
     """Make a command script that adds ".bla" to the filename."""
     command_file = tmp_path / "myscript_bla.sh"
@@ -261,7 +261,7 @@ def test_find_files_and_generate_message_with_static_metadata(files_to_glob):
     assert message.data["sensor"] == "thermometer"
 
 
-@pytest.fixture()
+@pytest.fixture
 def files_to_glob(tmp_path):
     """Create multiple files to glob."""
     some_files = ["file1", "file2", "file3"]
@@ -337,7 +337,7 @@ def test_dataset_removed_from_input_mda(single_file_to_glob):
     assert "dataset" not in message.data
 
 
-@pytest.fixture()
+@pytest.fixture
 def single_file_to_glob(tmp_path):
     """Create a single file to glob."""
     some_files = ["file1"]
@@ -348,7 +348,7 @@ def single_file_to_glob(tmp_path):
     return pattern
 
 
-@pytest.fixture()
+@pytest.fixture
 def old_generated_file(tmp_path):
     """Create a single file to glob."""
     some_files = ["file0.bla"]
