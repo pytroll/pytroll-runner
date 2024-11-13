@@ -25,6 +25,7 @@ echo "Got $*"
 script_bla = """#!/bin/bash
 for file in $*; do
     cp "$file" "$file.bla"
+    echo "Written output file : $file.bla"
 done
 """
 
@@ -478,6 +479,40 @@ def test_main_parse_log_configfile(config_file_aws,log_config_file):
 
     assert isinstance(logging.getLogger("").handlers[0], logging.StreamHandler)
 
+@pytest.fixture
+def ten_files_to_glob(tmp_path):
+    """Create multiple files to glob."""
+    n_files = 10
+    some_files = [f"file{n}" for n in range(n_files)]
+    for filename in some_files:
+        with open(tmp_path / filename, "w") as fd:
+            fd.write("hi")
+    return some_files
+
+def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, command_bla, ten_files_to_glob):
+    """Test run and publish."""
+    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
+    pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
+                      output_files_log_regex="Written output file : (.*.bla)",
+                      topic="/hi/there")
+    command_path = os.fspath(command_bla)
+    test_config = dict(subscriber_config=sub_config,
+                       script=dict(command=command_path, workers=4),
+                       publisher_config=pub_config)
+    yaml_file = tmp_path / "config.yaml"
+    with open(yaml_file, "w") as fd:
+        fd.write(yaml.dump(test_config))
+
+    some_files = ten_files_to_glob
+    datas = [{"uri": os.fspath(tmp_path / f), "uid": f}  for f in some_files]
+    messages = [Message("some_topic", "file", data=data) for data in datas]
+
+    with patched_subscriber_recv(messages):
+        with patched_publisher() as published_messages:
+            run_and_publish(yaml_file)
+            assert len(published_messages) == 10
+            res_files = [Message(rawstr=msg).data["uid"] for msg in published_messages]
+            assert res_files != sorted(res_files)
 
 def test_run_and_publish_from_message_file(tmp_path, config_file_aws):
     """Test run and publish."""
