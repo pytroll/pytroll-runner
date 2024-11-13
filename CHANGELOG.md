@@ -1,3 +1,17 @@
+## Version 0.1.0 (2024/11/13)
+
+
+### Pull Requests Merged
+
+#### Features added
+
+* [PR 19](https://github.com/pytroll/pytroll-runner/pull/19) - Add multiple threads capability
+* [PR 8](https://github.com/pytroll/pytroll-runner/pull/8) - Add possibility to pass a message file
+* [PR 7](https://github.com/pytroll/pytroll-runner/pull/7) - [pre-commit.ci] pre-commit autoupdate
+
+In this release 3 pull requests were closed.
+
+
 ## Version 0.0.3 (2024/01/31)
 
 
