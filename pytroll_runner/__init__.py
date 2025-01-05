@@ -12,7 +12,9 @@ publisher_config:
   static_metadata:
     sensor: thermometer
   topic: /hi/there
-script: /tmp/pytest-of-a001673/pytest-169/test_fake_publisher0/myscript_bla.sh
+script:
+  command: /tmp/pytest-of-a001673/pytest-169/test_fake_publisher0/myscript_bla.sh
+  workers: 4
 subscriber_config:
   addresses:
   - ipc://bla
@@ -26,7 +28,9 @@ import logging.config
 import os
 import re
 from contextlib import closing, suppress
+from functools import partial
 from glob import glob
+from multiprocessing.pool import ThreadPool
 from subprocess import PIPE, Popen
 
 import yaml
@@ -43,7 +47,7 @@ def main(args=None):
     setup_logging(parsed_args.log_config)
 
     logger.info("Start generic pytroll-runner")
-    return run_and_publish(parsed_args.config_file)
+    return run_and_publish(parsed_args.config_file, parsed_args.message_file)
 
 
 def setup_logging(config_file):
@@ -64,10 +68,13 @@ def parse_args(args=None):
     parser.add_argument("-l", "--log_config",
                         help="The log configuration yaml file.",
                         default=None)
+    parser.add_argument("-m", "--message-file",
+                        help="A file containing messages to process.",
+                        default=None)
     return parser.parse_args(args)
 
 
-def run_and_publish(config_file):
+def run_and_publish(config_file, message_file=None):
     """Run the command and publish the expected files."""
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
     with suppress(KeyError):
@@ -75,7 +82,11 @@ def run_and_publish(config_file):
 
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
         pub.start()
-        for log_output, mda in run_from_new_subscriber(command_to_call, subscriber_config):
+        if message_file is None:
+            gen = run_from_new_subscriber(command_to_call, subscriber_config)
+        else:
+            gen = run_from_message_file(command_to_call, message_file)
+        for log_output, mda in gen:
             try:
                 message = generate_message_from_log_output(publisher_config, mda, log_output)
             except KeyError:
@@ -85,16 +96,11 @@ def run_and_publish(config_file):
             pub.send(str(message))
 
 
-def generate_message_from_log_output(publisher_config, mda, log_output):
-    """Generate message for the filenames present in the log output."""
-    logger.debug(str(log_output))
-    logger.debug(str(publisher_config["output_files_log_regex"]))
-    new_files = re.findall(publisher_config["output_files_log_regex"], str(log_output))
-    logger.debug(f"Output files identified = str{new_files}")
-    if len(new_files) == 0:
-        logger.warning("No output files to publish identified!")
-    message = generate_message_from_new_files(publisher_config, new_files, mda)
-    return message
+def run_from_message_file(command_to_call, message_file):
+    """Run the command on message file."""
+    with open(message_file) as fd:
+        messages = (Message(rawstr=line) for line in fd if line)
+        yield from run_on_messages(command_to_call, messages)
 
 
 def check_existing_files(publisher_config):
@@ -135,16 +141,33 @@ def run_from_new_subscriber(command, subscriber_settings):
 
 def run_on_messages(command, messages):
     """Run the command on files from messages."""
+    try:
+        num_workers = command.get("workers", 1)
+    except AttributeError:
+        num_workers = 1
+    pool = ThreadPool(num_workers)
+    run_command_on_message = partial(run_on_single_message, command)
+
+    yield from pool.imap_unordered(run_command_on_message, select_messages(messages))
+
+
+def select_messages(messages):
+    """Select only valid messages."""
     accepted_message_types = ["file", "dataset"]
     for message in messages:
         if message.type not in accepted_message_types:
             continue
-        try:  # file
-            files = [message.data["uri"]]
-        except KeyError:  # dataset
-            files = []
-            files.extend(info["uri"] for info in message.data["dataset"])
-        yield run_on_files(command, files), message.data
+        yield message
+
+
+def run_on_single_message(command, message):
+    """Run the command on files from message."""
+    try:  # file
+        files = [message.data["uri"]]
+    except KeyError:  # dataset
+        files = []
+        files.extend(info["uri"] for info in message.data["dataset"])
+    return run_on_files(command, files), message.data
 
 
 def run_on_files(command, files):
@@ -152,11 +175,30 @@ def run_on_files(command, files):
     if not files:
         return
     logger.info(f"Start running command {command} on files {files}")
-    process = Popen([os.fspath(command), *files], stdout=PIPE)  # noqa: S603
+    try:
+        command_to_call = command["command"]
+    except TypeError:
+        command_to_call = command
+    process = Popen([*os.fspath(command_to_call).split(), *files], stdout=PIPE)  # noqa: S603
     out, _ = process.communicate()
-    out = out.decode('utf-8')
     logger.debug(f"After having run the script: {out}")
     return out
+
+
+def generate_message_from_log_output(publisher_config, mda, log_output):
+    """Generate message for the filenames present in the log output."""
+    logstring = str(log_output)
+    logger.debug(logstring)
+    if isinstance(logstring, bytes):
+        logstring = logstring.decode('utf-8')
+
+    logger.debug(str(publisher_config["output_files_log_regex"]))
+    new_files = re.findall(publisher_config["output_files_log_regex"], logstring)
+    logger.debug(f"Output files identified = str{new_files}")
+    if len(new_files) == 0:
+        logger.warning("No output files to publish identified!")
+    message = generate_message_from_new_files(publisher_config, new_files, mda)
+    return message
 
 
 def generate_message_from_expected_files(pub_config, extra_metadata=None, preexisting_files=None):
