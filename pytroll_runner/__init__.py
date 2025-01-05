@@ -187,14 +187,14 @@ def run_on_files(command, files):
 
 def generate_message_from_log_output(publisher_config, mda, log_output):
     """Generate message for the filenames present in the log output."""
-    logstring = str(log_output)
-    logger.debug(logstring)
-    if isinstance(logstring, bytes):
-        logstring = logstring.decode('utf-8')
+    logger.debug(f"type(log_output) = {type(log_output)}")
+    logger.debug(log_output)
+    if isinstance(log_output, bytes):
+        log_output = log_output.decode('utf-8')
 
     logger.debug(str(publisher_config["output_files_log_regex"]))
-    new_files = re.findall(publisher_config["output_files_log_regex"], logstring)
-    logger.debug(f"Output files identified = str{new_files}")
+    new_files = re.findall(publisher_config["output_files_log_regex"], log_output)
+    logger.debug(f"Output files identified = {new_files}")
     if len(new_files) == 0:
         logger.warning("No output files to publish identified!")
     message = generate_message_from_new_files(publisher_config, new_files, mda)
