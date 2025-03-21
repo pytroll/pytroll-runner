@@ -31,6 +31,7 @@ from contextlib import closing, suppress
 from functools import partial
 from glob import glob
 from multiprocessing.pool import ThreadPool
+from pathlib import Path
 from subprocess import PIPE, Popen
 
 import yaml
@@ -41,7 +42,7 @@ from posttroll.subscriber import create_subscriber_from_dict_config
 logger = logging.getLogger("pytroll-runner")
 
 
-def main(args=None):
+def main(args: list[str] | None = None):
     """Main script."""
     parsed_args = parse_args(args=args)
     setup_logging(parsed_args.log_config)
@@ -50,7 +51,7 @@ def main(args=None):
     return run_and_publish(parsed_args.config_file, parsed_args.message_file)
 
 
-def setup_logging(config_file):
+def setup_logging(config_file: str | None):
     """Setup the logging from a log config yaml file."""
     if config_file is not None:
         with open(config_file) as fd:
@@ -59,12 +60,13 @@ def setup_logging(config_file):
             return
 
 
-def parse_args(args=None):
+def parse_args(args: list[str] | None = None):
     """Parse command line arguments."""
     parser = argparse.ArgumentParser("Pytroll Runner",
                                      description="Automate third party software in a pytroll environment")
     parser.add_argument("config_file",
-                        help="The configuration file to run on.")
+                        help="The configuration file to run on.",
+                        type=Path)
     parser.add_argument("-l", "--log_config",
                         help="The log configuration yaml file.",
                         default=None)
@@ -74,7 +76,7 @@ def parse_args(args=None):
     return parser.parse_args(args)
 
 
-def run_and_publish(config_file, message_file=None):
+def run_and_publish(config_file: Path, message_file: str | None = None):
     """Run the command and publish the expected files."""
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
     with suppress(KeyError):
@@ -109,20 +111,20 @@ def check_existing_files(publisher_config):
     return set(glob(filepattern))
 
 
-def read_config(config_file):
+def read_config(config_file: Path):
     """Read the configuration file."""
     with open(config_file) as fd:
-        config = yaml.safe_load(fd.read())
-    return validate_config(config)
+        config: dict[str, object] = yaml.safe_load(fd.read())
+    return curate_config(config)
 
 
-def validate_config(config):
+def curate_config(config):
     """Validate the configuration file."""
     publisher_config = config["publisher_config"]
     if "output_files_log_regex" not in publisher_config and "expected_files" not in publisher_config:
         raise KeyError("Missing ways to identify output files. "
-                                    "Either provide 'expected_files' or "
-                                    "'output_files_log_regex' in the config file.")
+                       "Either provide 'expected_files' or "
+                       "'output_files_log_regex' in the config file.")
 
     subscriber_config = config["subscriber_config"]
     logger.debug("Subscriber config settings: ")
