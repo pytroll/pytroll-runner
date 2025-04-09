@@ -14,7 +14,7 @@ The configuration file is made of three sections.
 ### `script`
 
 A dictionary with:
-- `command` Full path script to run
+- `command` Full path script to run, with extra options. If a message is used as source, the metadata can be passed to the command using the curly-brace python format syntax, eg `/path/to/myscript.sh -s {start_time:%Y%m%dT%H%M%S}`.
 - optionally `workers` The number of workers to use for parallel processing of messages. Defaults to 1.
 
 ### `subscriber_config`

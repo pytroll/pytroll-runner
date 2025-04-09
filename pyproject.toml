@@ -13,6 +13,11 @@ build-backend = "setuptools.build_meta"
 [project.scripts]
 pytroll-runner = "pytroll_runner:main"
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.3.5",
+]
+
 [tool.ruff]
 lint.select = ["E", "W", "F", "I", "D", "S", "B", "A", "PT", "Q", "TID"]
 lint.ignore = ["B905"]  # only available from python 3.10

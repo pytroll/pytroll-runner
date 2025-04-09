@@ -162,26 +162,33 @@ def select_messages(messages):
         yield message
 
 
-def run_on_single_message(command, message):
+def run_on_single_message(command: dict[str, str | int] | Path | str, message: Message):
     """Run the command on files from message."""
+    metadata = message.data.copy()
     try:  # file
-        files = [message.data["uri"]]
+        files = [metadata.pop("uri")]
     except KeyError:  # dataset
         files = []
-        files.extend(info["uri"] for info in message.data["dataset"])
-    return run_on_files(command, files), message.data
+        files.extend(info["uri"] for info in metadata.pop("dataset"))
+    command_to_call = get_command_to_call(command, metadata)
+    return run_on_files(command_to_call, files), message.data
 
 
-def run_on_files(command, files):
+def get_command_to_call(command: dict[str, str | int] | Path | str, metadata: dict[str, str]) -> str:
+    """Get the command string to call."""
+    try:
+        command_to_call = command["command"]
+    except TypeError:
+        command_to_call = os.fspath(command)
+    return command_to_call.format(**metadata)
+
+
+def run_on_files(command: str, files: list[str]) -> bytes | None:
     """Run the command of files."""
     if not files:
         return
     logger.info(f"Start running command {command} on files {files}")
-    try:
-        command_to_call = command["command"]
-    except TypeError:
-        command_to_call = command
-    process = Popen([*os.fspath(command_to_call).split(), *files], stdout=PIPE)  # noqa: S603
+    process = Popen([*command.split(), *files], stdout=PIPE)  # noqa: S603
     out, _ = process.communicate()
     logger.debug(f"After having run the script: {out}")
     return out
