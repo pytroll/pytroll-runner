@@ -1,6 +1,8 @@
 """Tests for the pytroll runner."""
 import logging
 import os
+from datetime import datetime
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -71,11 +73,11 @@ def log_config_file(tmp_path):
 
 
 @pytest.fixture
-def command(tmp_path):
+def command(tmp_path: Path) -> Path:
     """Make a command script that just prints out the files it got."""
     command_file = tmp_path / "myscript.sh"
     with open(command_file, "w") as fobj:
-        fobj.write(script)
+        _ = fobj.write(script)
     os.chmod(command_file, 0o700)
     return command_file
 
@@ -151,16 +153,18 @@ def write_config_file(tmp_path, config):
 
 
 
-def test_run_on_files_passes_files_to_script(command):
+def test_run_on_files_passes_files_to_script(command: Path):
     """Test that the script is called."""
     some_files = ["file1", "file2", "file3"]
-    out = run_on_files(command, some_files)
+    out = run_on_files(os.fspath(command), some_files)
+    assert out
     assert out.decode().strip() == "Got " + " ".join(some_files)
 
-def test_run_on_files_accepts_scripts_with_args(command):
+def test_run_on_files_accepts_scripts_with_args(command: Path):
     """Test that the script is called."""
     some_files = ["file1", "file2", "file3"]
     out = run_on_files(str(command) + " -f -v -h", some_files)
+    assert out
     assert out.decode().strip() == "Got -f -v -h " + " ".join(some_files)
 
 
@@ -168,9 +172,19 @@ def test_run_on_messages_passes_files_to_script(command):
     """Test that the script is called."""
     some_files = ["file1", "file2", "file3"]
     messages = [Message("some_topic", "file", data={"uri": f}) for f in some_files]
-    for i, (out, _mda) in enumerate(run_on_messages(command, messages)):
+    for i, (out, _mda) in enumerate(run_on_messages(str(command), messages)):
         assert out.decode().strip() == "Got " + some_files[i]
 
+
+def test_run_on_messages_passes_metadata_to_script(command: Path):
+    """Test that the script is called."""
+    some_files = ["file1", "file2", "file3"]
+    messages = [Message("some_topic", "file", data={"uri": f,
+                                                    "info": "hi",
+                                                    "time": datetime(2025, 4, 9, 19, 12, 52)}) for f in some_files]
+    command_to_call = os.fspath(command) + " {info} -s {time:%Y%m%dT%H%M%S}"
+    for i, (out, _mda) in enumerate(run_on_messages(command_to_call, messages)):
+        assert out.decode().strip() == "Got hi -s 20250409T191252 " + some_files[i]
 
 def test_run_on_messages_passes_dataset_to_script(command):
     """Test that the script is called."""
