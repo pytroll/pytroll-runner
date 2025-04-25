@@ -1,6 +1,7 @@
 """Tests for the pytroll runner."""
 import logging
 import os
+import sys
 from unittest import mock
 
 import pytest
@@ -19,23 +20,23 @@ from pytroll_runner import (
 )
 
 
-def script(stderr=False):
+def script(redirection_specification):
     return f"""#!/bin/bash
-echo "Got $*"{' >&2' if stderr else ''}
+echo "Got $*"{redirection_specification}
 """
 
 
-def script_bla(stderr=False):
+def script_bla(redirection_specification):
     return f"""#!/bin/bash
 for file in $*; do
     cp "$file" "$file.bla"
-    echo "Written output file : $file.bla"{' >&2' if stderr else ''}
+    echo "Written output file : $file.bla"{redirection_specification}
 done
 """
 
 
 # ruff: noqa: E501
-def script_aws(stderr=False):
+def script_aws(redirection_specification):
     return f"""#!/bin/bash
 echo "2023-08-17T09:48:45.949211 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 1: Starting IPF-AWS-L1 v1.0.1 processor (elapsed 0.000 seconds)
 2023-08-17T09:48:45.949358 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 2: Loading JobOrder (elapsed 0.000 seconds)
@@ -48,55 +49,60 @@ echo "2023-08-17T09:48:45.949211 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [
 2023-08-17T09:48:46.578498 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Written output file : /local_disk/aws_test/test/RAD_AWS_1B/W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc
 2023-08-17T09:48:46.588984 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 7: Exiting (elapsed 0.640 seconds)
 2023-08-17T09:48:46.589031 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] IPF-AWS-L1 v1.0.1 processor ending with success
-2023-08-17T09:48:46.589041 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Exiting with EXIT CODE 0"{' >&2' if stderr else ''}
+2023-08-17T09:48:46.589041 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Exiting with EXIT CODE 0"{redirection_specification}
 """
 
 
-def log_config_content(stderr=False):
+def log_config_content(output_stream=sys.stdout):
     return f"""version: 1
 disable_existing_loggers: false
 handlers:
   console:
     class: logging.StreamHandler
     level: DEBUG
-    stream: ext://sys.{'stderr' if stderr else 'stdout'}
+    stream: ext://sys.{'stderr' if output_stream is sys.stderr else 'stdout'}
 root:
   level: DEBUG
   handlers: [console]
 """
 
 
-@pytest.fixture(params=[False, True])
-def dumped_to_std_err(request):
+@pytest.fixture(params=[sys.stdout, sys.stderr])
+def output_stream(request):
     return request.param
 
 
 @pytest.fixture
-def log_config_file(dumped_to_std_err, tmp_path):
+def redirection_specification(output_stream):
+    return ' >&2' if output_stream is sys.stderr else ''
+
+
+@pytest.fixture
+def log_config_file(output_stream, tmp_path):
     """Write a log config file."""
     log_config = tmp_path / "mylogconfig.yaml"
     with open(log_config, "w") as fobj:
-        fobj.write(log_config_content(dumped_to_std_err))
+        fobj.write(log_config_content(output_stream))
 
     return log_config
 
 
 @pytest.fixture
-def command(dumped_to_std_err, tmp_path):
+def command(redirection_specification, tmp_path):
     """Make a command script that just prints out the files it got."""
     command_file = tmp_path / "myscript.sh"
     with open(command_file, "w") as fobj:
-        fobj.write(script(dumped_to_std_err))
+        fobj.write(script(redirection_specification))
     os.chmod(command_file, 0o700)
     return command_file
 
 
 @pytest.fixture
-def command_bla(dumped_to_std_err, tmp_path):
+def command_bla(redirection_specification, tmp_path):
     """Make a command script that adds ".bla" to the filename."""
     command_file = tmp_path / "myscript_bla.sh"
     with open(command_file, "w") as fobj:
-        fobj.write(script_bla(dumped_to_std_err))
+        fobj.write(script_bla(redirection_specification))
     os.chmod(command_file, 0o700)
     return command_file
 
@@ -123,11 +129,11 @@ def config_file_bla(tmp_path, config_bla):
 
 
 @pytest.fixture
-def command_aws(dumped_to_std_err, tmp_path):
+def command_aws(redirection_specification, tmp_path):
     """Make a command script that outputs a log with an output filename."""
     command_file = tmp_path / "myscript_aws.sh"
     with open(command_file, "w") as fobj:
-        fobj.write(script_aws(dumped_to_std_err))
+        fobj.write(script_aws(redirection_specification))
     os.chmod(command_file, 0o700)
     return command_file
 
