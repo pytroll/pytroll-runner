@@ -181,9 +181,11 @@ def run_on_files(command, files):
         command_to_call = command["command"]
     except TypeError:
         command_to_call = command
-    process = Popen([*os.fspath(command_to_call).split(), *files], stdout=PIPE)  # noqa: S603
-    out, _ = process.communicate()
-    logger.debug(f"After having run the script: {out}")
+    process = Popen([*os.fspath(command_to_call).split(), *files], stdout=PIPE, stderr=PIPE)  # noqa: S603
+    out, err = process.communicate()
+    logger.debug(f"After having run the script: [stdout]{out} [stderr]{err}")
+    if err:
+        return out + err
     return out
 
 
