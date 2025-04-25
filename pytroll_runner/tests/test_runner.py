@@ -150,12 +150,12 @@ def write_config_file(tmp_path, config):
     return yaml_file
 
 
-
 def test_run_on_files_passes_files_to_script(command):
     """Test that the script is called."""
     some_files = ["file1", "file2", "file3"]
     out = run_on_files(command, some_files)
     assert out.decode().strip() == "Got " + " ".join(some_files)
+
 
 def test_run_on_files_accepts_scripts_with_args(command):
     """Test that the script is called."""
@@ -207,6 +207,7 @@ def test_run_starts_and_stops_subscriber(command):
             pass
         subscriber_creator.assert_called_once_with(subscriber_settings)
         subscriber_creator.return_value.close.assert_called_once()
+
 
 def test_run_on_subscriber(command):
     """Test that we run using a subscriber."""
@@ -470,7 +471,7 @@ def test_main_crashes_when_config_file_missing():
         main(["moose_config.yaml"])
 
 
-def test_main_parse_log_configfile(config_file_aws,log_config_file):
+def test_main_parse_log_configfile(config_file_aws, log_config_file):
     """Test that when parsing a log-config yaml file logging is being setup."""
     messages = []
     with patched_subscriber_recv(messages):
@@ -478,6 +479,7 @@ def test_main_parse_log_configfile(config_file_aws,log_config_file):
             main([str(config_file_aws), "-l", str(log_config_file)])
 
     assert isinstance(logging.getLogger("").handlers[0], logging.StreamHandler)
+
 
 @pytest.fixture
 def ten_files_to_glob(tmp_path):
@@ -488,6 +490,7 @@ def ten_files_to_glob(tmp_path):
         with open(tmp_path / filename, "w") as fd:
             fd.write("hi")
     return some_files
+
 
 def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, command_bla, ten_files_to_glob):
     """Test run and publish."""
@@ -504,7 +507,7 @@ def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, comman
         fd.write(yaml.dump(test_config))
 
     some_files = ten_files_to_glob
-    datas = [{"uri": os.fspath(tmp_path / f), "uid": f}  for f in some_files]
+    datas = [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]
     messages = [Message("some_topic", "file", data=data) for data in datas]
 
     with patched_subscriber_recv(messages):
@@ -513,6 +516,7 @@ def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, comman
             assert len(published_messages) == 10
             res_files = [Message(rawstr=msg).data["uid"] for msg in published_messages]
             assert res_files != sorted(res_files)
+
 
 def test_run_and_publish_from_message_file(tmp_path, config_file_aws):
     """Test run and publish."""
