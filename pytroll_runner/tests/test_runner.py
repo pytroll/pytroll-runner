@@ -21,12 +21,14 @@ from pytroll_runner import (
 
 
 def script(redirection_specification):
+    """A bash script to generate a generic output log."""
     return f"""#!/bin/bash
 echo "Got $*"{redirection_specification}
 """
 
 
 def script_bla(redirection_specification):
+    """A bash script to generate the output log for writing files."""
     return f"""#!/bin/bash
 for file in $*; do
     cp "$file" "$file.bla"
@@ -37,6 +39,7 @@ done
 
 # ruff: noqa: E501
 def script_aws(redirection_specification):
+    """A bash script to generate the output log for AWS."""
     return f"""#!/bin/bash
 echo "2023-08-17T09:48:45.949211 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 1: Starting IPF-AWS-L1 v1.0.1 processor (elapsed 0.000 seconds)
 2023-08-17T09:48:45.949358 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 2: Loading JobOrder (elapsed 0.000 seconds)
@@ -54,6 +57,7 @@ echo "2023-08-17T09:48:45.949211 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [
 
 
 def log_config_content(output_stream=sys.stdout):
+    """Configuration of the logger."""
     return f"""version: 1
 disable_existing_loggers: false
 handlers:
@@ -69,12 +73,14 @@ root:
 
 @pytest.fixture(params=[sys.stdout, sys.stderr])
 def output_stream(request):
+    """A parametrized fixture to specify what outputstream should be used."""
     return request.param
 
 
 @pytest.fixture
 def redirection_specification(output_stream):
-    return ' >&2' if output_stream is sys.stderr else ''
+    """A fixture to redirect the output to the given stream."""
+    return " >&2" if output_stream is sys.stderr else ""
 
 
 @pytest.fixture
