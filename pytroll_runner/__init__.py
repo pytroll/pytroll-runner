@@ -203,6 +203,9 @@ def generate_message_from_expected_files(pub_config, extra_metadata=None, preexi
 
 def generate_message_from_new_files(pub_config, new_files, extra_metadata):
     """Generate a message containing the new files."""
+    if not new_files:
+        return None
+
     metadata = populate_metadata(extra_metadata, pub_config.get("static_metadata", {}))
     dataset = []
     for filepath in sorted(new_files):
