@@ -447,6 +447,22 @@ def test_run_and_publish_with_files_from_log(tmp_path, config_file_aws):
             assert message.data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
 
 
+def test_run_and_no_publish_when_regex_unmatched(tmp_path, config_aws, caplog):
+    """Test run and publish."""
+    some_files = ["file1"]
+    data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
+    first_message = Message("some_topic", "dataset", data=data)
+
+    config_aws["publisher_config"]["output_files_log_regex"] = r"regex_that_does_not_match_anything!"
+    _config_file_aws = write_config_file(tmp_path, config_aws)
+    caplog.set_level(logging.DEBUG)
+    with patched_subscriber_recv([first_message]):
+        with patched_publisher() as published_messages:
+            run_and_publish(_config_file_aws)
+            assert "No message will be sent" in caplog.text
+            assert published_messages == []
+
+
 def test_run_and_publish_with_faulty_config(tmp_path, config_aws):
     """Test run and publish."""
     config_aws["publisher_config"].pop("output_files_log_regex")
