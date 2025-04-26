@@ -94,8 +94,11 @@ def run_and_publish(config_file: Path, message_file: str | None = None):
             except KeyError:
                 message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
                 preexisting_files = check_existing_files(publisher_config)
-            logger.debug(f"Sending message = {message}")
-            pub.send(str(message))
+            if message:
+                logger.debug(f"Sending message = {message}")
+                pub.send(str(message))
+            else:
+                logger.debug("No message will be sent, as the regex did not match any files!")
 
 
 def run_from_message_file(command_to_call, message_file):
