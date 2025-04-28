@@ -1,6 +1,7 @@
 """Tests for the pytroll runner."""
 import logging
 import os
+import sys
 from unittest import mock
 
 import pytest
@@ -18,20 +19,28 @@ from pytroll_runner import (
     run_on_messages,
 )
 
-script = """#!/bin/bash
-echo "Got $*"
+
+def script(redirection_specification):
+    """A bash script to generate a generic output log."""
+    return f"""#!/bin/bash
+echo "Got $*"{redirection_specification}
 """
 
-script_bla = """#!/bin/bash
+
+def script_bla(redirection_specification):
+    """A bash script to generate the output log for writing files."""
+    return f"""#!/bin/bash
 for file in $*; do
     cp "$file" "$file.bla"
-    echo "Written output file : $file.bla"
+    echo "Written output file : $file.bla"{redirection_specification}
 done
 """
 
-# ruff: noqa: E501
 
-script_aws = """#!/bin/bash
+# ruff: noqa: E501
+def script_aws(redirection_specification):
+    """A bash script to generate the output log for AWS."""
+    return f"""#!/bin/bash
 echo "2023-08-17T09:48:45.949211 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 1: Starting IPF-AWS-L1 v1.0.1 processor (elapsed 0.000 seconds)
 2023-08-17T09:48:45.949358 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 2: Loading JobOrder (elapsed 0.000 seconds)
 2023-08-17T09:48:45.950030 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 3: Initializing AWS L1 (elapsed 0.001 seconds)
@@ -43,49 +52,63 @@ echo "2023-08-17T09:48:45.949211 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [
 2023-08-17T09:48:46.578498 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Written output file : /local_disk/aws_test/test/RAD_AWS_1B/W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc
 2023-08-17T09:48:46.588984 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 7: Exiting (elapsed 0.640 seconds)
 2023-08-17T09:48:46.589031 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] IPF-AWS-L1 v1.0.1 processor ending with success
-2023-08-17T09:48:46.589041 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Exiting with EXIT CODE 0"
+2023-08-17T09:48:46.589041 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Exiting with EXIT CODE 0"{redirection_specification}
 """
 
 
-log_config_content = """version: 1
+def log_config_content(output_stream=sys.stdout):
+    """Configuration of the logger."""
+    return f"""version: 1
 disable_existing_loggers: false
 handlers:
   console:
     class: logging.StreamHandler
     level: DEBUG
-    stream: ext://sys.stdout
+    stream: ext://sys.{'stderr' if output_stream is sys.stderr else 'stdout'}
 root:
   level: DEBUG
   handlers: [console]
 """
 
 
+@pytest.fixture(params=[sys.stdout, sys.stderr])
+def output_stream(request):
+    """A parametrized fixture to specify what outputstream should be used."""
+    return request.param
+
+
 @pytest.fixture
-def log_config_file(tmp_path):
+def redirection_specification(output_stream):
+    """A fixture to redirect the output to the given stream."""
+    return " >&2" if output_stream is sys.stderr else ""
+
+
+@pytest.fixture
+def log_config_file(output_stream, tmp_path):
     """Write a log config file."""
     log_config = tmp_path / "mylogconfig.yaml"
     with open(log_config, "w") as fobj:
-        fobj.write(log_config_content)
+        fobj.write(log_config_content(output_stream))
 
     return log_config
 
 
 @pytest.fixture
-def command(tmp_path):
+def command(redirection_specification, tmp_path):
     """Make a command script that just prints out the files it got."""
     command_file = tmp_path / "myscript.sh"
     with open(command_file, "w") as fobj:
-        fobj.write(script)
+        fobj.write(script(redirection_specification))
     os.chmod(command_file, 0o700)
     return command_file
 
 
 @pytest.fixture
-def command_bla(tmp_path):
+def command_bla(redirection_specification, tmp_path):
     """Make a command script that adds ".bla" to the filename."""
     command_file = tmp_path / "myscript_bla.sh"
     with open(command_file, "w") as fobj:
-        fobj.write(script_bla)
+        fobj.write(script_bla(redirection_specification))
     os.chmod(command_file, 0o700)
     return command_file
 
@@ -112,11 +135,11 @@ def config_file_bla(tmp_path, config_bla):
 
 
 @pytest.fixture
-def command_aws(tmp_path):
+def command_aws(redirection_specification, tmp_path):
     """Make a command script that outputs a log with an output filename."""
     command_file = tmp_path / "myscript_aws.sh"
     with open(command_file, "w") as fobj:
-        fobj.write(script_aws)
+        fobj.write(script_aws(redirection_specification))
     os.chmod(command_file, 0o700)
     return command_file
 
@@ -150,12 +173,12 @@ def write_config_file(tmp_path, config):
     return yaml_file
 
 
-
 def test_run_on_files_passes_files_to_script(command):
     """Test that the script is called."""
     some_files = ["file1", "file2", "file3"]
     out = run_on_files(command, some_files)
     assert out.decode().strip() == "Got " + " ".join(some_files)
+
 
 def test_run_on_files_accepts_scripts_with_args(command):
     """Test that the script is called."""
@@ -207,6 +230,7 @@ def test_run_starts_and_stops_subscriber(command):
             pass
         subscriber_creator.assert_called_once_with(subscriber_settings)
         subscriber_creator.return_value.close.assert_called_once()
+
 
 def test_run_on_subscriber(command):
     """Test that we run using a subscriber."""
@@ -470,7 +494,7 @@ def test_main_crashes_when_config_file_missing():
         main(["moose_config.yaml"])
 
 
-def test_main_parse_log_configfile(config_file_aws,log_config_file):
+def test_main_parse_log_configfile(config_file_aws, log_config_file):
     """Test that when parsing a log-config yaml file logging is being setup."""
     messages = []
     with patched_subscriber_recv(messages):
@@ -478,6 +502,7 @@ def test_main_parse_log_configfile(config_file_aws,log_config_file):
             main([str(config_file_aws), "-l", str(log_config_file)])
 
     assert isinstance(logging.getLogger("").handlers[0], logging.StreamHandler)
+
 
 @pytest.fixture
 def ten_files_to_glob(tmp_path):
@@ -488,6 +513,7 @@ def ten_files_to_glob(tmp_path):
         with open(tmp_path / filename, "w") as fd:
             fd.write("hi")
     return some_files
+
 
 def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, command_bla, ten_files_to_glob):
     """Test run and publish."""
@@ -504,7 +530,7 @@ def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, comman
         fd.write(yaml.dump(test_config))
 
     some_files = ten_files_to_glob
-    datas = [{"uri": os.fspath(tmp_path / f), "uid": f}  for f in some_files]
+    datas = [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]
     messages = [Message("some_topic", "file", data=data) for data in datas]
 
     with patched_subscriber_recv(messages):
@@ -513,6 +539,7 @@ def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, comman
             assert len(published_messages) == 10
             res_files = [Message(rawstr=msg).data["uid"] for msg in published_messages]
             assert res_files != sorted(res_files)
+
 
 def test_run_and_publish_from_message_file(tmp_path, config_file_aws):
     """Test run and publish."""
