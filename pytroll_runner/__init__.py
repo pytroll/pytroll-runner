@@ -27,7 +27,7 @@ import logging
 import logging.config
 import os
 import re
-from contextlib import closing, suppress
+from contextlib import closing
 from functools import partial
 from glob import glob
 from multiprocessing.pool import ThreadPool
@@ -79,8 +79,7 @@ def parse_args(args: list[str] | None = None):
 def run_and_publish(config_file: Path, message_file: str | None = None):
     """Run the command and publish the expected files."""
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
-    with suppress(KeyError):
-        preexisting_files = check_existing_files(publisher_config)
+    preexisting_files = check_existing_files(publisher_config)
 
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
         pub.start()
@@ -110,7 +109,7 @@ def run_from_message_file(command_to_call, message_file):
 
 def check_existing_files(publisher_config):
     """Check for previously generated files."""
-    filepattern = publisher_config["expected_files"]
+    filepattern = publisher_config.get("expected_files", "")
     return set(glob(filepattern))
 
 
