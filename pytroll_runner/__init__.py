@@ -89,15 +89,22 @@ def run_and_publish(config_file: Path, message_file: str | None = None):
             gen = run_from_message_file(command_to_call, message_file)
         for log_output, mda in gen:
             try:
-                message = generate_message_from_log_output(publisher_config, mda, log_output)
-            except KeyError:
-                message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
-                preexisting_files = check_existing_files(publisher_config)
-            if message:
+                message, preexisting_files = generate_message(publisher_config, log_output, mda, preexisting_files)
                 logger.debug(f"Sending message = {message}")
                 pub.send(str(message))
-            else:
-                logger.debug("No message will be sent, as the regex did not match any files!")
+            except FileNotFoundError:
+                logger.debug("We could find not any new files, so no message will be sent.")
+
+
+def generate_message(publisher_config, log_output, mda, preexisting_files):
+    """Generate message from either the log output or existing files."""
+    try:
+        message = generate_message_from_log_output(publisher_config, mda, log_output)
+    except KeyError:
+        message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
+        preexisting_files = check_existing_files(publisher_config)
+
+    return message, preexisting_files
 
 
 def run_from_message_file(command_to_call, message_file):

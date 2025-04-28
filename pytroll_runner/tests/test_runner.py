@@ -459,7 +459,7 @@ def test_run_and_no_publish_when_regex_unmatched(tmp_path, config_aws, caplog):
     with patched_subscriber_recv([first_message]):
         with patched_publisher() as published_messages:
             run_and_publish(_config_file_aws)
-            assert "No message will be sent" in caplog.text
+            assert "We could find not any new files, so no message will be sent." in caplog.text
             assert published_messages == []
 
 
