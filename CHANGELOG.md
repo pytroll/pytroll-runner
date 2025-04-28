@@ -1,3 +1,21 @@
+## Version 0.2.0 (2025/04/28)
+
+
+### Pull Requests Merged
+
+#### Bugs fixed
+
+* [PR 34](https://github.com/pytroll/pytroll-runner/pull/34) - Fix the bug #25 that a message is sent even when there is no match for the given regex
+* [PR 33](https://github.com/pytroll/pytroll-runner/pull/33) - Support stderr
+
+#### Features added
+
+* [PR 31](https://github.com/pytroll/pytroll-runner/pull/31) - Allow passing metadata to the script
+* [PR 29](https://github.com/pytroll/pytroll-runner/pull/29) - Migrate ci to newer python
+
+In this release 4 pull requests were closed.
+
+
 ## Version 0.1.0 (2024/11/13)
 
 
