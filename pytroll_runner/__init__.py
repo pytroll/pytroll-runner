@@ -183,7 +183,7 @@ def run_on_files(command, files):
         command_to_call = command
     process = Popen([*os.fspath(command_to_call).split(), *files], stdout=PIPE, stderr=PIPE)  # noqa: S603
     out, err = process.communicate()
-    logger.debug(f"After having run the script: [stdout]{out} [stderr]{err}")
+    logger.debug(f"After having run the script: [stdout]{out}\n[stderr]{err}")
     return out + err
 
 
