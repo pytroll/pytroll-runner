@@ -41,7 +41,6 @@ from posttroll.subscriber import create_subscriber_from_dict_config
 
 logger = logging.getLogger("pytroll-runner")
 
-
 def main(args: list[str] | None = None):
     """Main script."""
     parsed_args = parse_args(args=args)
@@ -162,7 +161,8 @@ def select_messages(messages):
         yield message
 
 
-def run_on_single_message(command: dict[str, str | int] | Path | str, message: Message):
+def run_on_single_message(command: dict[str, str | int] | Path | str,
+                          message: Message) -> tuple[bytes, dict[str, object]]:
     """Run the command on files from message."""
     metadata = message.data.copy()
     try:  # file
