@@ -41,7 +41,6 @@ from posttroll.subscriber import create_subscriber_from_dict_config
 
 logger = logging.getLogger("pytroll-runner")
 
-
 def main(args: list[str] | None = None):
     """Main script."""
     parsed_args = parse_args(args=args)
@@ -171,26 +170,34 @@ def select_messages(messages):
         yield message
 
 
-def run_on_single_message(command, message):
+def run_on_single_message(command: dict[str, str | int] | Path | str,
+                          message: Message) -> tuple[bytes, dict[str, object]]:
     """Run the command on files from message."""
+    metadata = message.data.copy()
     try:  # file
-        files = [message.data["uri"]]
+        files = [metadata.pop("uri")]
     except KeyError:  # dataset
         files = []
-        files.extend(info["uri"] for info in message.data["dataset"])
-    return run_on_files(command, files), message.data
+        files.extend(info["uri"] for info in metadata.pop("dataset"))
+    command_to_call = get_command_to_call(command, metadata)
+    return run_on_files(command_to_call, files), message.data
 
 
-def run_on_files(command, files):
+def get_command_to_call(command: dict[str, str | int] | Path | str, metadata: dict[str, str]) -> str:
+    """Get the command string to call."""
+    try:
+        command_to_call = command["command"]
+    except TypeError:
+        command_to_call = os.fspath(command)
+    return command_to_call.format(**metadata)
+
+
+def run_on_files(command: str, files: list[str]) -> bytes | None:
     """Run the command of files."""
     if not files:
         return
     logger.info(f"Start running command {command} on files {files}")
-    try:
-        command_to_call = command["command"]
-    except TypeError:
-        command_to_call = command
-    process = Popen([*os.fspath(command_to_call).split(), *files], stdout=PIPE, stderr=PIPE)  # noqa: S603
+    process = Popen([*command.split(), *files], stdout=PIPE, stderr=PIPE)  # noqa: S603
     out, err = process.communicate()
     logger.debug(f"After having run the script: [stdout]{out}\n[stderr]{err}")
     return out + err
