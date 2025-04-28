@@ -188,10 +188,10 @@ def run_on_files(command: str, files: list[str]) -> bytes | None:
     if not files:
         return
     logger.info(f"Start running command {command} on files {files}")
-    process = Popen([*command.split(), *files], stdout=PIPE)  # noqa: S603
-    out, _ = process.communicate()
-    logger.debug(f"After having run the script: {out}")
-    return out
+    process = Popen([*command.split(), *files], stdout=PIPE, stderr=PIPE)  # noqa: S603
+    out, err = process.communicate()
+    logger.debug(f"After having run the script: [stdout]{out}\n[stderr]{err}")
+    return out + err
 
 
 def generate_message_from_log_output(publisher_config, mda, log_output):
