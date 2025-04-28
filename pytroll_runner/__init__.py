@@ -27,7 +27,7 @@ import logging
 import logging.config
 import os
 import re
-from contextlib import closing, suppress
+from contextlib import closing
 from functools import partial
 from glob import glob
 from multiprocessing.pool import ThreadPool
@@ -79,8 +79,7 @@ def parse_args(args: list[str] | None = None):
 def run_and_publish(config_file: Path, message_file: str | None = None):
     """Run the command and publish the expected files."""
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
-    with suppress(KeyError):
-        preexisting_files = check_existing_files(publisher_config)
+    preexisting_files = check_existing_files(publisher_config)
 
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
         pub.start()
@@ -90,12 +89,22 @@ def run_and_publish(config_file: Path, message_file: str | None = None):
             gen = run_from_message_file(command_to_call, message_file)
         for log_output, mda in gen:
             try:
-                message = generate_message_from_log_output(publisher_config, mda, log_output)
-            except KeyError:
-                message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
-                preexisting_files = check_existing_files(publisher_config)
-            logger.debug(f"Sending message = {message}")
-            pub.send(str(message))
+                message, preexisting_files = generate_message(publisher_config, mda, log_output, preexisting_files)
+                logger.debug(f"Sending message = {message}")
+                pub.send(str(message))
+            except FileNotFoundError:
+                logger.debug("We could find not any new files, so no message will be sent.")
+
+
+def generate_message(publisher_config, mda, log_output, preexisting_files):
+    """Generate message from either the log output or existing files."""
+    try:
+        message = generate_message_from_log_output(publisher_config, mda, log_output)
+    except KeyError:
+        message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
+        preexisting_files = check_existing_files(publisher_config)
+
+    return message, preexisting_files
 
 
 def run_from_message_file(command_to_call, message_file):
@@ -107,7 +116,7 @@ def run_from_message_file(command_to_call, message_file):
 
 def check_existing_files(publisher_config):
     """Check for previously generated files."""
-    filepattern = publisher_config["expected_files"]
+    filepattern = publisher_config.get("expected_files", "")
     return set(glob(filepattern))
 
 
@@ -203,6 +212,9 @@ def generate_message_from_expected_files(pub_config, extra_metadata=None, preexi
 
 def generate_message_from_new_files(pub_config, new_files, extra_metadata):
     """Generate a message containing the new files."""
+    if not new_files:
+        raise FileNotFoundError("No new files were found.")
+
     metadata = populate_metadata(extra_metadata, pub_config.get("static_metadata", {}))
     dataset = []
     for filepath in sorted(new_files):
