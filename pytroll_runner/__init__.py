@@ -92,7 +92,7 @@ def run_and_publish(config_file: Path, message_file: str | None = None):
                 logger.debug(f"Sending message = {message}")
                 pub.send(str(message))
             except FileNotFoundError:
-                logger.debug("We could find not any new files, so no message will be sent.")
+                logger.debug("We could not find any new files, so no message will be sent.")
 
 
 def generate_message(publisher_config, mda, log_output, preexisting_files):
