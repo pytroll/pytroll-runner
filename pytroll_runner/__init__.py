@@ -205,7 +205,7 @@ def run_on_files(command: str, files: list[str], search_log: bool) -> bytes | No
         logger.debug(f"After having run the script: [stdout]{out}\n[stderr]{err}")
         return out + err
     else:
-        process = Popen([*command.split(), *files])
+        process = Popen([*command.split(), *files])  # noqa: S603
         out, err = process.communicate()
         logger.debug("After having run the script.")
         return None
