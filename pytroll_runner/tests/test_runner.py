@@ -178,7 +178,7 @@ def write_config_file(tmp_path, config):
 def test_run_on_files_passes_files_to_script(command: Path):
     """Test that the script is called."""
     some_files = ["file1", "file2", "file3"]
-    out = run_on_files(os.fspath(command), some_files)
+    out = run_on_files(os.fspath(command), some_files, True)
     assert out
     assert out.decode().strip() == "Got " + " ".join(some_files)
 
@@ -186,7 +186,7 @@ def test_run_on_files_passes_files_to_script(command: Path):
 def test_run_on_files_accepts_scripts_with_args(command: Path):
     """Test that the script is called."""
     some_files = ["file1", "file2", "file3"]
-    out = run_on_files(str(command) + " -f -v -h", some_files)
+    out = run_on_files(str(command) + " -f -v -h", some_files, True)
     assert out
     assert out.decode().strip() == "Got -f -v -h " + " ".join(some_files)
 
@@ -195,7 +195,7 @@ def test_run_on_messages_passes_files_to_script(command):
     """Test that the script is called."""
     some_files = ["file1", "file2", "file3"]
     messages = [Message("some_topic", "file", data={"uri": f}) for f in some_files]
-    for i, (out, _mda) in enumerate(run_on_messages(str(command), messages)):
+    for i, (out, _mda) in enumerate(run_on_messages(str(command), messages, True)):
         assert out.decode().strip() == "Got " + some_files[i]
 
 
@@ -206,7 +206,7 @@ def test_run_on_messages_passes_metadata_to_script(command: Path):
                                                     "info": "hi",
                                                     "time": datetime(2025, 4, 9, 19, 12, 52)}) for f in some_files]
     command_to_call = os.fspath(command) + " {info} -s {time:%Y%m%dT%H%M%S}"
-    for i, (out, _mda) in enumerate(run_on_messages(command_to_call, messages)):
+    for i, (out, _mda) in enumerate(run_on_messages(command_to_call, messages, True)):
         assert out.decode().strip() == "Got hi -s 20250409T191252 " + some_files[i]
 
 def test_run_on_messages_passes_dataset_to_script(command):
@@ -214,7 +214,7 @@ def test_run_on_messages_passes_dataset_to_script(command):
     some_files = ["file1", "file2", "file3"]
     data = {"dataset": [{"uri": f} for f in some_files]}
     messages = [Message("some_topic", "dataset", data=data)]
-    for out, _mda in run_on_messages(command, messages):
+    for out, _mda in run_on_messages(command, messages, True):
         assert out.decode().strip() == "Got " + " ".join(some_files)
 
 
@@ -222,7 +222,7 @@ def test_run_on_messages_does_not_run_on_ack(command):
     """Test that run does not consider ack messages."""
     some_files = ["file1", "file2", "file3"]
     messages = [Message("some_topic", "ack", data={"uri": f}) for f in some_files]
-    for _ in run_on_messages(command, messages):
+    for _ in run_on_messages(command, messages, True):
         raise AssertionError
 
 
@@ -231,7 +231,7 @@ def test_run_on_messages_does_not_pass_dataset_from_ack(command):
     some_files = ["file1", "file2", "file3"]
     data = {"dataset": [{"uri": f} for f in some_files]}
     messages = [Message("some_topic", "ack", data=data)]
-    for _ in run_on_messages(command, messages):
+    for _ in run_on_messages(command, messages, True):
         raise AssertionError
 
 
@@ -240,7 +240,7 @@ def test_run_starts_and_stops_subscriber(command):
     subscriber_settings = dict(nameserver=False, addresses=["ipc://bla"])
     with mock.patch("pytroll_runner.create_subscriber_from_dict_config") as subscriber_creator:
         subscriber_creator.return_value.recv.return_value = []
-        for _ in run_from_new_subscriber(command, subscriber_settings):
+        for _ in run_from_new_subscriber(command, subscriber_settings, True):
             pass
         subscriber_creator.assert_called_once_with(subscriber_settings)
         subscriber_creator.return_value.close.assert_called_once()
@@ -252,7 +252,7 @@ def test_run_on_subscriber(command):
     messages = [Message("some_topic", "file", data={"uri": f, "sensor": "thermometer"}) for f in some_files]
     subscriber_settings = dict(nameserver=False, addresses=["ipc://bla"])
     with patched_subscriber_recv(messages):
-        for i, (out, mda) in enumerate(run_from_new_subscriber(command, subscriber_settings)):
+        for i, (out, mda) in enumerate(run_from_new_subscriber(command, subscriber_settings, True)):
             assert out.decode().strip() == "Got " + some_files[i]
             assert mda["sensor"] == "thermometer"
     assert i == 2
@@ -505,11 +505,12 @@ def test_config_reader(command, tmp_path):
     yaml_file = tmp_path / "config.yaml"
     with open(yaml_file, "w") as fd:
         fd.write(yaml.dump(test_config))
-    command_to_call, subscriber_config, publisher_config = read_config(yaml_file)
+    command_to_call, subscriber_config, publisher_config, search_log = read_config(yaml_file)
 
     assert subscriber_config == sub_config
     assert command_to_call == command_path
     assert publisher_config == pub_config
+    assert search_log
 
 
 def test_main_crashes_when_config_missing():

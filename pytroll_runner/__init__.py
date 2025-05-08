@@ -77,15 +77,15 @@ def parse_args(args: list[str] | None = None):
 
 def run_and_publish(config_file: Path, message_file: str | None = None):
     """Run the command and publish the expected files."""
-    command_to_call, subscriber_config, publisher_config = read_config(config_file)
+    command_to_call, subscriber_config, publisher_config, search_log = read_config(config_file)
     preexisting_files = check_existing_files(publisher_config)
 
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
         pub.start()
         if message_file is None:
-            gen = run_from_new_subscriber(command_to_call, subscriber_config)
+            gen = run_from_new_subscriber(command_to_call, subscriber_config, search_log)
         else:
-            gen = run_from_message_file(command_to_call, message_file)
+            gen = run_from_message_file(command_to_call, message_file, search_log)
         for log_output, mda in gen:
             try:
                 message, preexisting_files = generate_message(publisher_config, mda, log_output, preexisting_files)
@@ -106,11 +106,11 @@ def generate_message(publisher_config, mda, log_output, preexisting_files):
     return message, preexisting_files
 
 
-def run_from_message_file(command_to_call, message_file):
+def run_from_message_file(command_to_call, message_file, search_log):
     """Run the command on message file."""
     with open(message_file) as fd:
         messages = (Message(rawstr=line) for line in fd if line)
-        yield from run_on_messages(command_to_call, messages)
+        yield from run_on_messages(command_to_call, messages, search_log)
 
 
 def check_existing_files(publisher_config):
@@ -129,6 +129,7 @@ def read_config(config_file: Path):
 def curate_config(config):
     """Validate the configuration file."""
     publisher_config = config["publisher_config"]
+    search_log = "output_files_log_regex" in publisher_config
     if "output_files_log_regex" not in publisher_config and "expected_files" not in publisher_config:
         raise KeyError("Missing ways to identify output files. "
                        "Either provide 'expected_files' or "
@@ -139,24 +140,24 @@ def curate_config(config):
     for item, val in subscriber_config.items():
         logger.debug(f"{item} = {str(val)}")
 
-    return config["script"], subscriber_config, publisher_config
+    return config["script"], subscriber_config, publisher_config, search_log
 
 
-def run_from_new_subscriber(command, subscriber_settings):
+def run_from_new_subscriber(command, subscriber_settings, search_log):
     """Run the command with files gotten from a new subscriber."""
     logger.debug("Run from new subscriber...")
     with closing(create_subscriber_from_dict_config(subscriber_settings)) as sub:
-        yield from run_on_messages(command, sub.recv())
+        yield from run_on_messages(command, sub.recv(), search_log)
 
 
-def run_on_messages(command, messages):
+def run_on_messages(command, messages, search_log):
     """Run the command on files from messages."""
     try:
         num_workers = command.get("workers", 1)
     except AttributeError:
         num_workers = 1
     pool = ThreadPool(num_workers)
-    run_command_on_message = partial(run_on_single_message, command)
+    run_command_on_message = partial(run_on_single_message, command, search_log)
 
     yield from pool.imap_unordered(run_command_on_message, select_messages(messages))
 
@@ -171,6 +172,7 @@ def select_messages(messages):
 
 
 def run_on_single_message(command: dict[str, str | int] | Path | str,
+                          search_log: bool,
                           message: Message) -> tuple[bytes, dict[str, object]]:
     """Run the command on files from message."""
     metadata = message.data.copy()
@@ -180,7 +182,7 @@ def run_on_single_message(command: dict[str, str | int] | Path | str,
         files = []
         files.extend(info["uri"] for info in metadata.pop("dataset"))
     command_to_call = get_command_to_call(command, metadata)
-    return run_on_files(command_to_call, files), message.data
+    return run_on_files(command_to_call, files, search_log), message.data
 
 
 def get_command_to_call(command: dict[str, str | int] | Path | str, metadata: dict[str, str]) -> str:
@@ -192,15 +194,21 @@ def get_command_to_call(command: dict[str, str | int] | Path | str, metadata: di
     return command_to_call.format(**metadata)
 
 
-def run_on_files(command: str, files: list[str]) -> bytes | None:
+def run_on_files(command: str, files: list[str], search_log: bool) -> bytes | None:
     """Run the command of files."""
     if not files:
         return
     logger.info(f"Start running command {command} on files {files}")
-    process = Popen([*command.split(), *files], stdout=PIPE, stderr=PIPE)  # noqa: S603
-    out, err = process.communicate()
-    logger.debug(f"After having run the script: [stdout]{out}\n[stderr]{err}")
-    return out + err
+    if search_log:
+        process = Popen([*command.split(), *files], stdout=PIPE, stderr=PIPE)  # noqa: S603
+        out, err = process.communicate()
+        logger.debug(f"After having run the script: [stdout]{out}\n[stderr]{err}")
+        return out + err
+    else:
+        process = Popen([*command.split(), *files])
+        out, err = process.communicate()
+        logger.debug("After having run the script.")
+        return None
 
 
 def generate_message_from_log_output(publisher_config, mda, log_output):
