@@ -33,6 +33,7 @@ from glob import glob
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
 from subprocess import PIPE, Popen
+from subprocess import run as subp_run
 
 import yaml
 from posttroll.message import Message
@@ -205,8 +206,7 @@ def run_on_files(command: str, files: list[str], search_log: bool) -> bytes | No
         logger.debug(f"After having run the script: [stdout]{out}\n[stderr]{err}")
         return out + err
     else:
-        process = Popen([*command.split(), *files])  # noqa: S603
-        out, err = process.communicate()
+        process = subp_run([*command.split(), *files])  # noqa: S603
         logger.debug("After having run the script.")
         return None
 
