@@ -32,7 +32,7 @@ from functools import partial
 from glob import glob
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
-from subprocess import PIPE, Popen
+from subprocess import PIPE, STDOUT, Popen
 
 import yaml
 from posttroll.message import Message
@@ -197,10 +197,12 @@ def run_on_files(command: str, files: list[str]) -> bytes | None:
     if not files:
         return
     logger.info(f"Start running command {command} on files {files}")
-    process = Popen([*command.split(), *files], stdout=PIPE, stderr=PIPE)  # noqa: S603
-    out, err = process.communicate()
-    logger.debug(f"After having run the script: [stdout]{out}\n[stderr]{err}")
-    return out + err
+    process = Popen([*command.split(), *files], stdout=PIPE, stderr=STDOUT)  # noqa: S603
+    out = b""
+    for line in process.stdout:
+        out += b"\n" + line
+        logger.info("  " + str(line))
+    return out
 
 
 def generate_message_from_log_output(publisher_config, mda, log_output):
