@@ -203,22 +203,22 @@ def run_on_files(command: str, files: list[str]) -> bytes | None:
     return out + err
 
 
-def generate_message_from_log_output(publisher_config, mda, log_output):
-    """Generate message for the filenames present in the log output."""
-    pattern = publisher_config["output_files_log_regex"]
+def get_newfiles_from_regex_and_logoutput(pattern, log_output):
+    """From a regex-pattern and the log-output determine the new files just generated and logged."""
     logger.debug(f'regex-pattern: {pattern}')
     logger.debug(f"type(log_output) = {type(log_output)}")
     logger.debug(log_output)
     if isinstance(log_output, bytes):
         log_output = log_output.decode('utf-8')
 
-    logger.debug(str(pattern))
     new_files = re.findall(pattern, log_output)
-    logger.debug(f"Output files identified = {new_files}")
+    logger.debug(f"Output files identified from log = {new_files}")
+    return new_files
 
-    if len(new_files) == 0:
-        logger.warning("No output files to publish identified!")
-
+def generate_message_from_log_output(publisher_config, mda, log_output):
+    """Generate message for the filenames present in the log output."""
+    pattern = publisher_config["output_files_log_regex"]
+    new_files = get_newfiles_from_regex_and_logoutput(pattern, log_output)
     message = generate_message_from_new_files(publisher_config, new_files, mda)
     return message
 
