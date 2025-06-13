@@ -206,10 +206,9 @@ def run_on_files(command: str, files: list[str]) -> bytes | None:
 def get_newfiles_from_regex_and_logoutput(pattern, log_output):
     """From a regex-pattern and the log-output determine the new files just generated and logged."""
     logger.debug(f"Matching regex-pattern: {pattern} from log output")
-    logger.debug(f"type(log_output) = {type(log_output)}")
     logger.debug(log_output)
     if isinstance(log_output, bytes):
-        log_output = log_output.decode('utf-8')
+        log_output = log_output.decode("utf-8")
 
     new_files = re.findall(pattern, log_output)
     logger.debug(f"Output files identified from log output = {new_files}")
