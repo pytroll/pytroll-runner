@@ -205,7 +205,7 @@ def run_on_files(command: str, files: list[str]) -> bytes | None:
 
 def get_newfiles_from_regex_and_logoutput(pattern, log_output):
     """From a regex-pattern and the log-output determine the new files just generated and logged."""
-    logger.debug(f'regex-pattern: {pattern}')
+    logger.debug(f"Matching regex-pattern: {pattern} from log output")
     logger.debug(f"type(log_output) = {type(log_output)}")
     logger.debug(log_output)
     if isinstance(log_output, bytes):
