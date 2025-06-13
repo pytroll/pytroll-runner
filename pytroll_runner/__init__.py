@@ -208,7 +208,7 @@ def get_newfiles_from_regex_and_logoutput(pattern, log_output):
     logger.debug(f"Matching regex-pattern: {pattern} from log output")
     logger.debug(f"type(log_output) = {type(log_output)}")
     logger.debug(log_output)
-    if isinstance(log_output, bytes):
+    with contextlib.suppress(AttributeError):
         log_output = log_output.decode('utf-8')
 
     new_files = re.findall(pattern, log_output)
