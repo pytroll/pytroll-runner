@@ -212,7 +212,7 @@ def get_newfiles_from_regex_and_logoutput(pattern, log_output):
         log_output = log_output.decode('utf-8')
 
     new_files = re.findall(pattern, log_output)
-    logger.debug(f"Output files identified from log = {new_files}")
+    logger.debug(f"Output files identified from log output = {new_files}")
     return new_files
 
 def generate_message_from_log_output(publisher_config, mda, log_output):
