@@ -23,11 +23,11 @@ subscriber_config:
 
 """
 import argparse
+import contextlib
 import logging
 import logging.config
 import os
 import re
-from contextlib import closing
 from functools import partial
 from glob import glob
 from multiprocessing.pool import ThreadPool
@@ -80,7 +80,7 @@ def run_and_publish(config_file: Path, message_file: str | None = None):
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
     preexisting_files = check_existing_files(publisher_config)
 
-    with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
+    with contextlib.closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
         pub.start()
         if message_file is None:
             gen = run_from_new_subscriber(command_to_call, subscriber_config)
@@ -145,7 +145,7 @@ def curate_config(config):
 def run_from_new_subscriber(command, subscriber_settings):
     """Run the command with files gotten from a new subscriber."""
     logger.debug("Run from new subscriber...")
-    with closing(create_subscriber_from_dict_config(subscriber_settings)) as sub:
+    with contextlib.closing(create_subscriber_from_dict_config(subscriber_settings)) as sub:
         yield from run_on_messages(command, sub.recv())
 
 
@@ -207,7 +207,7 @@ def get_newfiles_from_regex_and_logoutput(pattern, log_output):
     """From a regex-pattern and the log-output determine the new files just generated and logged."""
     logger.debug(f"Matching regex-pattern: {pattern} from log output")
     logger.debug(log_output)
-    if isinstance(log_output, bytes):
+    with contextlib.suppress(AttributeError):
         log_output = log_output.decode("utf-8")
 
     new_files = re.findall(pattern, log_output)
@@ -225,7 +225,6 @@ def generate_message_from_log_output(publisher_config, mda, log_output):
 def generate_message_from_expected_files(pub_config, extra_metadata=None, preexisting_files=None):
     """Generate a message containing the expected files."""
     new_files = find_new_files(pub_config, preexisting_files or set())
-
     return generate_message_from_new_files(pub_config, new_files, extra_metadata)
 
 
