@@ -201,7 +201,7 @@ def run_on_files(command: str, files: list[str]) -> bytes | None:
     out = b""
     for line in process.stdout:
         out += b"\n" + line
-        logger.info("  " + str(line))
+        logger.debug("  " + line.decode('utf-8').rstrip())
     return out
 
 
