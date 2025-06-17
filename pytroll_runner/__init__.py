@@ -205,19 +205,19 @@ def run_on_files(command: str, files: list[str]) -> bytes | None:
     return out
 
 
+def generate_message_from_log_output(publisher_config, mda, log_output):
+    """Generate message for the filenames present in the log output."""
+    new_files = get_newfiles_from_regex_and_logoutput(publisher_config["output_files_log_regex"], log_output)
+    message = generate_message_from_new_files(publisher_config, new_files, mda)
+    return message
+
+
 def get_newfiles_from_regex_and_logoutput(regex, log_output):
     """Get the filenames using a regex-pattern on the log_output."""
     logger.debug(f"Matching regex-pattern: {regex} from log output")
     new_files = re.findall(regex, str(log_output, "utf-8"))
     logger.debug(f"Output files identified from log output: {new_files}")
     return new_files
-
-
-def generate_message_from_log_output(publisher_config, mda, log_output):
-    """Generate message for the filenames present in the log output."""
-    new_files = get_newfiles_from_regex_and_logoutput(publisher_config["output_files_log_regex"], log_output)
-    message = generate_message_from_new_files(publisher_config, new_files, mda)
-    return message
 
 
 def generate_message_from_expected_files(pub_config, extra_metadata=None, preexisting_files=None):
