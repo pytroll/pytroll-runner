@@ -39,6 +39,18 @@ done
 """
 
 
+def script_random_sleep(redirection_specification):
+    """A bash script to generate the output log for writing files."""
+    return f"""#!/bin/bash
+for file in $*; do
+    sleep_time=$(bc -l <<< "scale=4 ; $RANDOM/327670/5")
+    sleep $sleep_time
+    cp "$file" "$file.bla"
+    echo "Written output file : $file.bla"{redirection_specification}
+done
+"""
+
+
 # ruff: noqa: E501
 def script_aws(redirection_specification):
     """A bash script to generate the output log for AWS."""
@@ -111,6 +123,16 @@ def command_bla(redirection_specification, tmp_path):
     command_file = tmp_path / "myscript_bla.sh"
     with open(command_file, "w") as fobj:
         fobj.write(script_bla(redirection_specification))
+    os.chmod(command_file, 0o700)
+    return command_file
+
+
+@pytest.fixture
+def command_random_sleep(redirection_specification, tmp_path):
+    """Make a command script that adds ".bla" to the filename."""
+    command_file = tmp_path / "myscript_bla.sh"
+    with open(command_file, "w") as fobj:
+        fobj.write(script_random_sleep(redirection_specification))
     os.chmod(command_file, 0o700)
     return command_file
 
@@ -545,13 +567,13 @@ def ten_files_to_glob(tmp_path):
     return some_files
 
 
-def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, command_bla, ten_files_to_glob):
+def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, command_random_sleep, ten_files_to_glob):
     """Test run and publish."""
     sub_config = dict(nameserver=False, addresses=["ipc://bla"])
     pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
                       output_files_log_regex="Written output file : (.*.bla)",
                       topic="/hi/there")
-    command_path = os.fspath(command_bla)
+    command_path = os.fspath(command_random_sleep)
     test_config = dict(subscriber_config=sub_config,
                        script=dict(command=command_path, workers=4),
                        publisher_config=pub_config)
