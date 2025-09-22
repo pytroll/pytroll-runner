@@ -2,13 +2,22 @@
 name = "pytroll-runner"
 dynamic = ["version"]
 dependencies = ["posttroll>=1.10.0"]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Topic :: Communications"
+]
 
 [build-system]
 requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2", 'setuptools_scm_git_archive']
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
-# write_to = "pytroll-runner/version.py"
+write_to = "pytroll-runner/version.py"
 
 [project.scripts]
 pytroll-runner = "pytroll_runner:main"
