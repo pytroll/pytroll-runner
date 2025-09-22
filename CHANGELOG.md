@@ -1,3 +1,26 @@
+## Version 0.3.0 (2025/09/22)
+
+### Issues Closed
+
+* [Issue 25](https://github.com/pytroll/pytroll-runner/issues/25) - Erorr: Message is sent even if no match is successful when using the output-files-log-regex method
+
+In this release 1 issue was closed.
+
+### Pull Requests Merged
+
+#### Bugs fixed
+
+* [PR 53](https://github.com/pytroll/pytroll-runner/pull/53) - Randomise threaded test
+* [PR 37](https://github.com/pytroll/pytroll-runner/pull/37) - Fix a typo in the logger.debug message issued by `run_and_publish()`
+
+#### Features added
+
+* [PR 54](https://github.com/pytroll/pytroll-runner/pull/54) - relicense to apache v2
+* [PR 40](https://github.com/pytroll/pytroll-runner/pull/40) - Make the output from the subprocess print line by line
+
+In this release 4 pull requests were closed.
+
+
 ## Version 0.2.0 (2025/04/28)
 
 
