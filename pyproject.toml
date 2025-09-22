@@ -13,11 +13,17 @@ classifiers = [
 ]
 
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2", 'setuptools_scm_git_archive']
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
-[tool.setuptools_scm]
-write_to = "pytroll-runner/version.py"
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "pytroll_runner/version.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [project.scripts]
 pytroll-runner = "pytroll_runner:main"
