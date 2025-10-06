@@ -1,3 +1,15 @@
+## Version 0.3.1 (2025/10/06)
+
+
+### Pull Requests Merged
+
+#### Features added
+
+* [PR 55](https://github.com/pytroll/pytroll-runner/pull/55) - Add deploy to pypi
+
+In this release 1 pull request was closed.
+
+
 ## Version 0.3.0 (2025/09/22)
 
 ### Issues Closed
