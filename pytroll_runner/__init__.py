@@ -212,18 +212,30 @@ def generate_message_from_log_output(publisher_config, mda, log_output):
     return message
 
 
+def _get_nefiles_from_regex(regex, log_output):
+    """Get list of new output files from log messages."""
+    logger.debug(f"Matching regex-pattern: {regex} from log output")
+    nfiles = re.findall(regex, str(log_output, "utf-8"))
+    logger.debug(f"Output files identified from log output: {nfiles}")
+    return nfiles
+
+
 def get_newfiles_from_regex_and_logoutput(regex, log_output):
     """Get the filenames using a regex-pattern on the log_output."""
-    logger.debug(f"Matching regex-pattern: {regex} from log output")
-    new_files = re.findall(regex, str(log_output, "utf-8"))
-    logger.debug(f"Output files identified from log output: {new_files}")
+    if isinstance(regex, list):
+        new_files = []
+        for rex in regex:
+            nfiles = _get_nefiles_from_regex(rex, log_output)
+            new_files = new_files + nfiles
+    else:
+        new_files = _get_nefiles_from_regex(regex, log_output)
+
     return new_files
 
 
 def generate_message_from_expected_files(pub_config, extra_metadata=None, preexisting_files=None):
     """Generate a message containing the expected files."""
     new_files = find_new_files(pub_config, preexisting_files or set())
-
     return generate_message_from_new_files(pub_config, new_files, extra_metadata)
 
 
