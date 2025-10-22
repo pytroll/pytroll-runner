@@ -225,10 +225,10 @@ def get_newfiles_from_regex_and_logoutput(regex, log_output):
     if isinstance(regex, list):
         new_files = []
         for rex in regex:
-            nfiles = _get_nefiles_from_regex(rex, log_output)
+            nfiles = _get_newfiles_from_regex(rex, log_output)
             new_files = new_files + nfiles
     else:
-        new_files = _get_nefiles_from_regex(regex, log_output)
+        new_files = _get_newfiles_from_regex(regex, log_output)
 
     return new_files
 
