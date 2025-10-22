@@ -212,7 +212,7 @@ def generate_message_from_log_output(publisher_config, mda, log_output):
     return message
 
 
-def _get_nefiles_from_regex(regex, log_output):
+def _get_newfiles_from_regex(regex, log_output):
     """Get list of new output files from log messages."""
     logger.debug(f"Matching regex-pattern: {regex} from log output")
     nfiles = re.findall(regex, str(log_output, "utf-8"))
