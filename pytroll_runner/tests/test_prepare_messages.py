@@ -53,8 +53,9 @@ EXAMPLE_LOG_OUTPUT_BYTES = (b"""\nGenerating configuration..\n\nSetting SELinux 
                             b"""/san1/polar_in/direct_readout/aws/lvl1/W_XX-SMHI-Kangerlussuaq,SAT,AWS1-MWR-1B-RAD_"""
                             b"""C_SMHI_20250602201120_L_D_20250602033328_20250602033625_C_N____.nc'\n""")
 
-EXPECTED_LIST = ["/san1/polar_in/direct_readout/aws/lvl1/W_XX-SMHI-Kangerlussuaq,SAT,AWS1-MWR-1B-RAD_C_SMHI_20250602201"
-                 "120_L_D_20250602033328_20250602033625_C_N____.nc"]
+EXPECTED_LIST_ONE = ["/san1/polar_in/direct_readout/aws/lvl1/"
+                     "W_XX-SMHI-Kangerlussuaq,SAT,AWS1-MWR-1B-RAD_C_SMHI_20250602201"
+                     "120_L_D_20250602033328_20250602033625_C_N____.nc"]
 
 LOG_OUTPUT_SEVERAL_FILES = (b"""\n[INFO: 2025-10-21 11:27:47 : pps_mw.writers.level2] Start writing level2 dataset."""
                             b"""\n[INFO: 2025-10-21 11:27:47 : pps_mw.writers.level2] Has written level2 file: """
@@ -70,47 +71,44 @@ LOG_OUTPUT_SEVERAL_FILES = (b"""\n[INFO: 2025-10-21 11:27:47 : pps_mw.writers.le
                             b"""/san1/polar_in/regional/aws/l1b/W_XX-FMI-Sodankyla,SAT,AWS1-MWR-1B-RAD_C_FMI_"""
                             b"""_20251021112652_R_D_20251021111330_20251021112402_C_N____.nc.""")
 
-EXPECTED_LIST2 = ["/san1/polar_out/direct_readout/lvl2/S_NWC_PRHL_aws1_20251021T1116140Z_20251021T1123330Z.nc",
-                  "/san1/polar_out/direct_readout/lvl2/quicklook_PRHL_aws1_20251021111614_20251021112333_baltrad4.png",
-                  "/san1/polar_out/direct_readout/lvl2/quicklook_PRHL_aws1_20251021111614_20251021112333_euro4.png"
-                  ]
-
-@pytest.fixture
-def fake_config_yaml_one_output_file(tmp_path):
-    """Write fake config yaml file."""
-    file_path = tmp_path / "some_config_file.yaml"
-    with open(file_path, "w") as fpt:
-        fpt.write(TEST_YAML_CONFIG_ONE_OUTPUT_FILE)
-
-    return file_path
+EXPECTED_LIST_MANY = ["/san1/polar_out/direct_readout/lvl2/"
+                      "S_NWC_PRHL_aws1_20251021T1116140Z_20251021T1123330Z.nc",
+                      "/san1/polar_out/direct_readout/lvl2/"
+                      "quicklook_PRHL_aws1_20251021111614_20251021112333_baltrad4.png",
+                      "/san1/polar_out/direct_readout/lvl2/"
+                      "quicklook_PRHL_aws1_20251021111614_20251021112333_euro4.png"
+                      ]
 
 
 @pytest.fixture
-def fake_config_yaml_many_output_files(tmp_path):
-    """Write fake config yaml file."""
-    file_path = tmp_path / "some_config_many_output_files.yaml"
-    with open(file_path, "w") as fpt:
-        fpt.write(TEST_YAML_CONFIG_MANY_OUTPUT_FILES)
+def fake_config_yaml(tmp_path, request):
+    """Write fake config yaml file based on parameter."""
+    if request.param == "one":
+        content = TEST_YAML_CONFIG_ONE_OUTPUT_FILE
+        filename = "config_one.yaml"
+    elif request.param == "many":
+        content = TEST_YAML_CONFIG_MANY_OUTPUT_FILES
+        filename = "config_many.yaml"
+    else:
+        raise ValueError(f"Unknown param: {request.param}")
 
+    file_path = tmp_path / filename
+    file_path.write_text(content)
     return file_path
 
 
-def test_get_newfiles_from_regex_and_logoutput(fake_config_yaml_one_output_file):
-    """Test getting new files from regex pattern and log output."""
-    log_output = EXAMPLE_LOG_OUTPUT_BYTES
-    config = read_config(fake_config_yaml_one_output_file)
-
-    pattern = config[2]["output_files_log_regex"]
-    result = get_newfiles_from_regex_and_logoutput(pattern, log_output)
-    assert result == EXPECTED_LIST
-
-
-def test_get_newfiles_from_regex_patterns_and_logoutput(fake_config_yaml_many_output_files):
-    """Test getting new files from regex patterns and log output."""
-    log_output = LOG_OUTPUT_SEVERAL_FILES
-    config = read_config(fake_config_yaml_many_output_files)
-
+@pytest.mark.parametrize(
+    ("fake_config_yaml", "log_output", "expected_list"),
+    [
+        ("one", EXAMPLE_LOG_OUTPUT_BYTES, EXPECTED_LIST_ONE),
+        ("many", LOG_OUTPUT_SEVERAL_FILES, EXPECTED_LIST_MANY),
+    ],
+    indirect=["fake_config_yaml"]
+)
+def test_get_newfiles_from_regex_and_logoutput(fake_config_yaml, log_output, expected_list):
+    """Test getting new files from regex pattern(s) and log output."""
+    config = read_config(fake_config_yaml)
     pattern = config[2]["output_files_log_regex"]
     result = get_newfiles_from_regex_and_logoutput(pattern, log_output)
 
-    assert sorted(result) == sorted(EXPECTED_LIST2)
+    assert sorted(result) == sorted(expected_list)
