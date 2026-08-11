@@ -88,9 +88,10 @@ def run_and_publish(config_file: Path, message_file: str | None = None):
             gen = run_from_message_file(command_to_call, message_file)
         for log_output, mda in gen:
             try:
-                message, preexisting_files = generate_message(publisher_config, mda, log_output, preexisting_files)
-                logger.debug(f"Sending message = {message}")
-                pub.send(str(message))
+                messages, preexisting_files = generate_message(publisher_config, mda, log_output, preexisting_files)
+                for message in messages:
+                    logger.debug(f"Sending message = {message}")
+                    pub.send(str(message))
             except FileNotFoundError:
                 logger.debug("We could not find any new files, so no message will be sent.")
 
@@ -98,12 +99,13 @@ def run_and_publish(config_file: Path, message_file: str | None = None):
 def generate_message(publisher_config, mda, log_output, preexisting_files):
     """Generate message from either the log output or existing files."""
     try:
-        message = generate_message_from_log_output(publisher_config, mda, log_output)
+        messages = generate_message_from_log_output(publisher_config, mda, log_output)
     except KeyError:
         message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
         preexisting_files = check_existing_files(publisher_config)
+        messages = [message]
 
-    return message, preexisting_files
+    return messages, preexisting_files
 
 
 def run_from_message_file(command_to_call, message_file):
@@ -208,22 +210,41 @@ def run_on_files(command: str, files: list[str]) -> bytes | None:
 def generate_message_from_log_output(publisher_config, mda, log_output):
     """Generate message for the filenames present in the log output."""
     new_files = get_newfiles_from_regex_and_logoutput(publisher_config["output_files_log_regex"], log_output)
-    message = generate_message_from_new_files(publisher_config, new_files, mda)
-    return message
+    split_files = publisher_config.get("split_files")
+    messages = []
+    if len(new_files) > 1 and split_files:
+        for newfile in new_files:
+            messages.append(generate_message_from_new_files(publisher_config, [newfile], mda))
+    else:
+        messages.append(generate_message_from_new_files(publisher_config, new_files, mda))
+
+    return messages
+
+
+def _get_newfiles_from_regex(regex, log_output):
+    """Get list of new output files from log messages."""
+    logger.debug(f"Matching regex-pattern: {regex} from log output")
+    nfiles = re.findall(regex, str(log_output, "utf-8"))
+    logger.debug(f"Output files identified from log output: {nfiles}")
+    return nfiles
 
 
 def get_newfiles_from_regex_and_logoutput(regex, log_output):
     """Get the filenames using a regex-pattern on the log_output."""
-    logger.debug(f"Matching regex-pattern: {regex} from log output")
-    new_files = re.findall(regex, str(log_output, "utf-8"))
-    logger.debug(f"Output files identified from log output: {new_files}")
+    if isinstance(regex, list):
+        new_files = []
+        for rex in regex:
+            nfiles = _get_newfiles_from_regex(rex, log_output)
+            new_files = new_files + nfiles
+    else:
+        new_files = _get_newfiles_from_regex(regex, log_output)
+
     return new_files
 
 
 def generate_message_from_expected_files(pub_config, extra_metadata=None, preexisting_files=None):
     """Generate a message containing the expected files."""
     new_files = find_new_files(pub_config, preexisting_files or set())
-
     return generate_message_from_new_files(pub_config, new_files, extra_metadata)
 
 
@@ -233,6 +254,7 @@ def generate_message_from_new_files(pub_config, new_files, extra_metadata):
         raise FileNotFoundError("No new files were found.")
 
     metadata = populate_metadata(extra_metadata, pub_config.get("static_metadata", {}))
+
     dataset = []
     for filepath in sorted(new_files):
         filename = os.path.basename(filepath)
