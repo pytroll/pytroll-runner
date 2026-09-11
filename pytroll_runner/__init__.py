@@ -84,13 +84,15 @@ def run_and_publish(config_file: Path, message_file: str | None = None):
     """Run the command and publish the expected files."""
     command_to_call, subscriber_config, publisher_config = read_config(config_file)
     preexisting_files = check_existing_files(publisher_config)
+    # the output of the command is only ever read to match `output_files_log_regex` against it
+    capture_output = "output_files_log_regex" in publisher_config
 
     with closing(create_publisher_from_dict_config(publisher_config["publisher_settings"])) as pub:
         pub.start()
         if message_file is None:
-            gen = run_from_new_subscriber(command_to_call, subscriber_config)
+            gen = run_from_new_subscriber(command_to_call, subscriber_config, capture_output)
         else:
-            gen = run_from_message_file(command_to_call, message_file)
+            gen = run_from_message_file(command_to_call, message_file, capture_output)
         for log_output, mda in gen:
             try:
                 message, preexisting_files = generate_message(publisher_config, mda, log_output, preexisting_files)
@@ -111,11 +113,11 @@ def generate_message(publisher_config, mda, log_output, preexisting_files):
     return message, preexisting_files
 
 
-def run_from_message_file(command_to_call, message_file):
+def run_from_message_file(command_to_call, message_file, capture_output=True):
     """Run the command on message file."""
     with open(message_file) as fd:
         messages = (Message(rawstr=line) for line in fd if line)
-        yield from run_on_messages(command_to_call, messages)
+        yield from run_on_messages(command_to_call, messages, capture_output)
 
 
 def check_existing_files(publisher_config):
@@ -147,21 +149,21 @@ def curate_config(config):
     return config["script"], subscriber_config, publisher_config
 
 
-def run_from_new_subscriber(command, subscriber_settings):
+def run_from_new_subscriber(command, subscriber_settings, capture_output=True):
     """Run the command with files gotten from a new subscriber."""
     logger.debug("Run from new subscriber...")
     with closing(create_subscriber_from_dict_config(subscriber_settings)) as sub:
-        yield from run_on_messages(command, sub.recv())
+        yield from run_on_messages(command, sub.recv(), capture_output)
 
 
-def run_on_messages(command, messages):
+def run_on_messages(command, messages, capture_output=True):
     """Run the command on files from messages."""
     try:
         num_workers = command.get("workers", 1)
     except AttributeError:
         num_workers = 1
     pool = ThreadPool(num_workers)
-    run_command_on_message = partial(run_on_single_message, command)
+    run_command_on_message = partial(run_on_single_message, command, capture_output=capture_output)
 
     for result in pool.imap_unordered(run_command_on_message, select_messages(messages)):
         if result is None:  # the command failed, see run_on_single_message
@@ -179,7 +181,8 @@ def select_messages(messages):
 
 
 def run_on_single_message(command: dict[str, str | int] | Path | str,
-                          message: Message) -> tuple[bytes, dict[str, object]] | None:
+                          message: Message,
+                          capture_output: bool = True) -> tuple[bytes, dict[str, object]] | None:
     """Run the command on files from message.
 
     Returns None when the command failed, so that no message is published for it.
@@ -192,7 +195,7 @@ def run_on_single_message(command: dict[str, str | int] | Path | str,
         files.extend(info["uri"] for info in metadata.pop("dataset"))
     command_to_call = get_command_to_call(command, metadata)
     try:
-        return run_on_files(command_to_call, files), message.data
+        return run_on_files(command_to_call, files, capture_output), message.data
     except ScriptFailure:
         logger.exception("No message will be sent for this input.")
         return None
@@ -207,8 +210,18 @@ def get_command_to_call(command: dict[str, str | int] | Path | str, metadata: di
     return command_to_call.format(**metadata)
 
 
-def run_on_files(command: str, files: list[str]) -> bytes | None:
+def run_on_files(command: str, files: list[str], capture_output: bool = True) -> bytes | None:
     """Run the command of files.
+
+    The output of the command is logged line by line as it arrives. When `capture_output` is True it
+    is also returned, byte for byte as the command produced it, so that `output_files_log_regex` can
+    be matched against the real output rather than against a reconstruction of it.
+
+    Args:
+        command: the command to run, with its arguments.
+        files: the input files to append to the command.
+        capture_output: whether the output is needed to identify the output files. When it is not,
+            nothing is accumulated and the log of a chatty command does not have to fit in memory.
 
     Raises:
         ScriptFailure: if the command exits with a non-zero return code.
@@ -216,15 +229,16 @@ def run_on_files(command: str, files: list[str]) -> bytes | None:
     if not files:
         return
     logger.info(f"Start running command {command} on files {files}")
-    out = b""
+    out = []
     with Popen([*command.split(), *files], stdout=PIPE, stderr=STDOUT) as process:  # noqa: S603
         for line in process.stdout:
-            out += b"\n" + line
+            if capture_output:
+                out.append(line)
             logger.debug("  " + line.decode("utf-8").rstrip())
     if process.returncode:
         raise ScriptFailure(f"Command {command} on files {files} "
                             f"returned with exit code {process.returncode}.")
-    return out
+    return b"".join(out)
 
 
 def generate_message_from_log_output(publisher_config, mda, log_output):

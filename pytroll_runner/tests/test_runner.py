@@ -14,6 +14,7 @@ from posttroll.testing import patched_publisher, patched_subscriber_recv
 from pytroll_runner import (
     ScriptFailure,
     generate_message_from_expected_files,
+    get_newfiles_from_regex_and_logoutput,
     main,
     read_config,
     run_and_publish,
@@ -27,6 +28,14 @@ def script(redirection_specification):
     """A bash script to generate a generic output log."""
     return f"""#!/bin/bash
 echo "Got $*"{redirection_specification}
+"""
+
+
+def script_two_lines(redirection_specification):
+    """A bash script printing two known lines, to check what is captured."""
+    return f"""#!/bin/bash
+echo "Processing done"{redirection_specification}
+echo "Output: /data/out.nc"{redirection_specification}
 """
 
 
@@ -130,6 +139,16 @@ def command(redirection_specification, tmp_path: Path) -> Path:
     command_file = tmp_path / "myscript.sh"
     with open(command_file, "w") as fobj:
         _ = fobj.write(script(redirection_specification))
+    os.chmod(command_file, 0o700)
+    return command_file
+
+
+@pytest.fixture
+def command_two_lines(redirection_specification, tmp_path):
+    """Make a command script printing two known lines."""
+    command_file = tmp_path / "myscript_two_lines.sh"
+    with open(command_file, "w") as fobj:
+        fobj.write(script_two_lines(redirection_specification))
     os.chmod(command_file, 0o700)
     return command_file
 
@@ -691,3 +710,66 @@ def test_a_failing_script_does_not_stop_the_runner(tmp_path, config_file_bla_fai
 
     assert len(published_messages) == 1
     assert Message(rawstr=published_messages[0]).data["uid"] == "good_file.bla"
+
+
+def test_run_on_files_captures_the_output_verbatim(tmp_path, command_two_lines):
+    """Test that the captured output is byte for byte what the command produced."""
+    some_file = tmp_path / "file1"
+    some_file.write_text("hi")
+
+    out = run_on_files(os.fspath(command_two_lines), [os.fspath(some_file)])
+
+    assert out == b"Processing done\nOutput: /data/out.nc\n"
+
+
+def test_captured_output_can_be_matched_across_lines(tmp_path, command_two_lines):
+    """Test that a regex spanning two lines matches the captured output."""
+    some_file = tmp_path / "file1"
+    some_file.write_text("hi")
+
+    out = run_on_files(os.fspath(command_two_lines), [os.fspath(some_file)])
+
+    assert get_newfiles_from_regex_and_logoutput("Processing done\nOutput: (.*.nc)", out) == ["/data/out.nc"]
+
+
+def test_run_on_files_can_skip_capturing_the_output(tmp_path, command_bla, caplog):
+    """Test that the command still runs and still logs when its output is not captured."""
+    some_file = tmp_path / "file1"
+    some_file.write_text("hi")
+
+    caplog.set_level(logging.DEBUG)
+    out = run_on_files(os.fspath(command_bla), [os.fspath(some_file)], capture_output=False)
+
+    assert out == b""
+    assert (tmp_path / "file1.bla").exists()
+    assert "Written output file" in caplog.text
+
+
+def test_output_is_not_captured_when_globbing_for_output_files(tmp_path, config_file_bla, files_to_glob):
+    """Test that the output is not accumulated when only the file pattern is used."""
+    some_files = ["file1"]
+    data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
+    message = Message("some_topic", "dataset", data=data)
+
+    with mock.patch("pytroll_runner.run_on_files", autospec=True, side_effect=run_on_files) as fake_run_on_files:
+        with patched_subscriber_recv([message]):
+            with patched_publisher() as published_messages:
+                run_and_publish(config_file_bla)
+
+    assert fake_run_on_files.call_args.args[2] is False
+    assert len(published_messages) == 1
+
+
+def test_output_is_captured_when_scraping_it_for_output_files(tmp_path, config_file_aws):
+    """Test that the output is accumulated when the log output is scraped for file names."""
+    some_files = ["file1"]
+    data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
+    message = Message("some_topic", "dataset", data=data)
+
+    with mock.patch("pytroll_runner.run_on_files", autospec=True, side_effect=run_on_files) as fake_run_on_files:
+        with patched_subscriber_recv([message]):
+            with patched_publisher() as published_messages:
+                run_and_publish(config_file_aws)
+
+    assert fake_run_on_files.call_args.args[2] is True
+    assert len(published_messages) == 1
