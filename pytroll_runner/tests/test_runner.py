@@ -610,3 +610,30 @@ def test_run_and_publish_from_message_file(tmp_path, config_file_aws):
         message = Message(rawstr=published_messages[0])
 
         assert message.data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
+
+
+def test_curate_config_rejects_expected_files_with_several_workers(tmp_path, config_bla):
+    """Test that globbing for output files is rejected when commands run concurrently."""
+    config_bla["script"] = dict(command=config_bla["script"], workers=4)
+    yaml_file = write_config_file(tmp_path, config_bla)
+
+    with pytest.raises(ValueError, match="'expected_files' strategy cannot be used with 4 workers"):
+        read_config(yaml_file)
+
+
+def test_curate_config_accepts_expected_files_with_one_worker(tmp_path, config_bla):
+    """Test that globbing for output files is fine when the commands run one at a time."""
+    config_bla["script"] = dict(command=config_bla["script"], workers=1)
+    yaml_file = write_config_file(tmp_path, config_bla)
+
+    command_to_call, _, _ = read_config(yaml_file)
+    assert command_to_call["workers"] == 1
+
+
+def test_curate_config_accepts_log_regex_with_several_workers(tmp_path, config_aws):
+    """Test that several workers are allowed when output files come from the log output."""
+    config_aws["script"] = dict(command=config_aws["script"], workers=4)
+    yaml_file = write_config_file(tmp_path, config_aws)
+
+    command_to_call, _, _ = read_config(yaml_file)
+    assert command_to_call["workers"] == 4

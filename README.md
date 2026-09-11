@@ -31,6 +31,18 @@ This section contains settings on how to publish messages.
 The glob pattern of files to be expected when the script is run. Beware that any files with matching filenames will
 be included in the list, and that could include files from previous runs.
 
+This strategy finds the output files by globbing the pattern and subtracting the files that were already there on the
+previous pass, which cannot tell apart the files written by commands running at the same time. It therefore requires
+`workers` to be 1, and the runner refuses to start otherwise. Use `output_files_log_regex` to process messages
+concurrently.
+
+#### `output_files_log_regex`
+
+A regular expression with one capturing group, matched against the output (stdout and stderr combined) of the script,
+to pick out the files it wrote, eg `"Written output file : (.*.nc)"`. This is the only strategy that can attribute
+output files to the run that produced them, so it is the one to use with several `workers`. When both this and
+`expected_files` are given, `output_files_log_regex` takes precedence.
+
 #### `static_metadata`
 
 Metadata to include in the published messages.
