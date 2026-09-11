@@ -214,8 +214,15 @@ def run_on_files(command: str, files: list[str], capture_output: bool = True) ->
     """Run the command of files.
 
     The output of the command is logged line by line as it arrives. When `capture_output` is True it
-    is also returned, byte for byte as the command produced it, so that `output_files_log_regex` can
-    be matched against the real output rather than against a reconstruction of it.
+    is also returned, byte for byte as it came out of the pipe, rather than as a reconstruction of
+    it, so that `output_files_log_regex` can be matched across several lines.
+
+    Note that what comes out of the pipe is stdout and stderr merged, in the order the two streams
+    reached it, which is not necessarily the order the command produced them: stdout is block
+    buffered when it is a pipe and stderr is not, so a command writing to both can have all of its
+    stderr arrive before any of its stdout. A partial line flushed to one stream can also be split
+    by a line written to the other. Matching across several lines is therefore only reliable for
+    lines the command writes to the same stream.
 
     Args:
         command: the command to run, with its arguments.
