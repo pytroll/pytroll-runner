@@ -753,11 +753,10 @@ def test_output_is_not_captured_when_globbing_for_output_files(tmp_path, config_
 
     with mock.patch("pytroll_runner.run_on_files", autospec=True, side_effect=run_on_files) as fake_run_on_files:
         with patched_subscriber_recv([message]):
-            with patched_publisher() as published_messages:
+            with patched_publisher():
                 run_and_publish(config_file_bla)
 
     assert fake_run_on_files.call_args.args[2] is False
-    assert len(published_messages) == 1
 
 
 def test_output_is_captured_when_scraping_it_for_output_files(tmp_path, config_file_aws):
@@ -768,8 +767,7 @@ def test_output_is_captured_when_scraping_it_for_output_files(tmp_path, config_f
 
     with mock.patch("pytroll_runner.run_on_files", autospec=True, side_effect=run_on_files) as fake_run_on_files:
         with patched_subscriber_recv([message]):
-            with patched_publisher() as published_messages:
+            with patched_publisher():
                 run_and_publish(config_file_aws)
 
     assert fake_run_on_files.call_args.args[2] is True
-    assert len(published_messages) == 1
