@@ -7,6 +7,9 @@ The published messages will contain metadata from the input message (except for 
 
 To start the runner: `pytroll-runner config.yaml`
 
+When the command exits with a non-zero return code, the run is logged as an error and no message is published for it,
+even if it did write some output files. The runner carries on with the next message.
+
 ## The configuration file
 
 The configuration file is made of three sections.
