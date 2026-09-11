@@ -104,11 +104,10 @@ def generate_message(publisher_config, mda, log_output, preexisting_files):
     the only strategy that can attribute output files to the run that produced them.
     """
     if "output_files_log_regex" in publisher_config:
-        message = generate_message_from_log_output(publisher_config, mda, log_output)
+        messages = generate_message_from_log_output(publisher_config, mda, log_output)
     else:
-        message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
+        messages = [generate_message_from_expected_files(publisher_config, mda, preexisting_files)]
         preexisting_files = check_existing_files(publisher_config)
-        messages = [message]
 
     return messages, preexisting_files
 

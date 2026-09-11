@@ -658,11 +658,14 @@ def test_log_regex_takes_precedence_over_expected_files(tmp_path, config_aws, fi
     data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
     first_message = Message("some_topic", "dataset", data=data)
 
-    expected = "W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc"
+    expected = ["W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc",
+                "some_other_file.nc"]
 
     with patched_subscriber_recv([first_message]):
         with patched_publisher() as published_messages:
             run_and_publish(yaml_file)
-            assert len(published_messages) == 1
-            message = Message(rawstr=published_messages[0])
-            assert message.data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
+
+    # the files_to_glob pattern matches only files that were already there, so anything published
+    # can only have come from the log output
+    uris = sorted(Message(rawstr=msg).data["uri"] for msg in published_messages)
+    assert uris == sorted("/local_disk/aws_test/test/RAD_AWS_1B/" + name for name in expected)
