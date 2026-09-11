@@ -3,7 +3,8 @@
 Example config file:
 
 publisher_config:
-  # at least one of the following two needs to be provided. If both are present, expected_files will take precedence
+  # at least one of the following two needs to be provided.
+  # If both are present, output_files_log_regex will take precedence
   expected_files: /tmp/pytest-of-a001673/pytest-169/test_fake_publisher0/file?.bla
   output_files_log_regex: "Written output file : (.*.nc)"
   publisher_settings:
@@ -96,10 +97,14 @@ def run_and_publish(config_file: Path, message_file: str | None = None):
 
 
 def generate_message(publisher_config, mda, log_output, preexisting_files):
-    """Generate message from either the log output or existing files."""
-    try:
+    """Generate message from either the log output or existing files.
+
+    When `output_files_log_regex` is configured it takes precedence over `expected_files`, as it is
+    the only strategy that can attribute output files to the run that produced them.
+    """
+    if "output_files_log_regex" in publisher_config:
         message = generate_message_from_log_output(publisher_config, mda, log_output)
-    except KeyError:
+    else:
         message = generate_message_from_expected_files(publisher_config, mda, preexisting_files)
         preexisting_files = check_existing_files(publisher_config)
 
@@ -133,6 +138,9 @@ def curate_config(config):
         raise KeyError("Missing ways to identify output files. "
                        "Either provide 'expected_files' or "
                        "'output_files_log_regex' in the config file.")
+    if "topic" not in publisher_config:
+        raise KeyError("Missing 'topic' in publisher_config. "
+                       "It is required to publish the messages for the output files.")
 
     subscriber_config = config["subscriber_config"]
     logger.debug("Subscriber config settings: ")

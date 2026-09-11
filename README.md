@@ -26,6 +26,10 @@ The configuration of the subscriber. The contents of this section are passed dir
 
 This section contains settings on how to publish messages.
 
+#### `topic`
+
+Required. The topic the messages for the output files are published on.
+
 #### `expected_files`
 
 The glob pattern of files to be expected when the script is run. Beware that any files with matching filenames will

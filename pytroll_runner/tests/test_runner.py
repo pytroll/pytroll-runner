@@ -610,3 +610,49 @@ def test_run_and_publish_from_message_file(tmp_path, config_file_aws):
         message = Message(rawstr=published_messages[0])
 
         assert message.data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
+
+
+def test_curate_config_crashes_when_topic_is_missing(tmp_path, config_aws):
+    """Test that a publisher_config without a topic is rejected."""
+    config_aws["publisher_config"].pop("topic")
+    yaml_file = write_config_file(tmp_path, config_aws)
+
+    with pytest.raises(KeyError, match="Missing 'topic' in publisher_config.*"):
+        read_config(yaml_file)
+
+
+def test_run_and_publish_crashes_when_topic_is_missing(tmp_path, config_aws, caplog):
+    """Test that a missing topic is reported instead of silently publishing nothing."""
+    config_aws["publisher_config"].pop("topic")
+    yaml_file = write_config_file(tmp_path, config_aws)
+
+    some_files = ["file1"]
+    data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
+    first_message = Message("some_topic", "dataset", data=data)
+
+    caplog.set_level(logging.DEBUG)
+    with patched_subscriber_recv([first_message]):
+        with patched_publisher():
+            with pytest.raises(KeyError, match="Missing 'topic' in publisher_config.*"):
+                run_and_publish(yaml_file)
+
+    assert "We could not find any new files, so no message will be sent." not in caplog.text
+
+
+def test_log_regex_takes_precedence_over_expected_files(tmp_path, config_aws, files_to_glob):
+    """Test that output_files_log_regex wins when both output strategies are configured."""
+    config_aws["publisher_config"]["expected_files"] = files_to_glob
+    yaml_file = write_config_file(tmp_path, config_aws)
+
+    some_files = ["file1"]
+    data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
+    first_message = Message("some_topic", "dataset", data=data)
+
+    expected = "W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc"
+
+    with patched_subscriber_recv([first_message]):
+        with patched_publisher() as published_messages:
+            run_and_publish(yaml_file)
+            assert len(published_messages) == 1
+            message = Message(rawstr=published_messages[0])
+            assert message.data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
