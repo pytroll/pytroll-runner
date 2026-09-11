@@ -64,6 +64,7 @@ echo "2023-08-17T09:48:45.949211 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [
 2023-08-17T09:48:46.321622 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 6: Writing AWS L1 Output (elapsed 0.373 seconds)
 2023-08-17T09:48:46.329884 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] lib4eo::NcMap: Loading map file '/local_disk/aws_test/conf/L1/AWS-L1B-RAD.xsd'
 2023-08-17T09:48:46.578498 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Written output file : /local_disk/aws_test/test/RAD_AWS_1B/W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc
+2023-08-17T09:48:46.578498 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Written output file : /local_disk/aws_test/test/RAD_AWS_1B/some_other_file.nc
 2023-08-17T09:48:46.588984 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [P] STEP 7: Exiting (elapsed 0.640 seconds)
 2023-08-17T09:48:46.589031 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] IPF-AWS-L1 v1.0.1 processor ending with success
 2023-08-17T09:48:46.589041 fe5e1feebbfb IPF-AWS-L1 01.00 [000000000045]: [I] Exiting with EXIT CODE 0"{redirection_specification}
@@ -174,7 +175,8 @@ def config_aws(command_aws):
     sub_config = dict(nameserver=False, addresses=["ipc://bla"])
     pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
                       topic="/hi/there",
-                      output_files_log_regex="Written output file : (.*.nc)")
+                      output_files_log_regex="Written output file : (.*.nc)",
+                      split_files=True)
     command_path = os.fspath(command_aws)
     test_config = dict(subscriber_config=sub_config,
                        script=command_path,
@@ -473,14 +475,21 @@ def test_run_and_publish_with_files_from_log(tmp_path, config_file_aws):
     data = {"dataset": [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]}
     first_message = Message("some_topic", "dataset", data=data)
 
-    expected = "W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc"
+    expected1 = "W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc"
+    expected2 = "some_other_file.nc"
 
+    msg_id = 0
+    message = {}
     with patched_subscriber_recv([first_message]):
         with patched_publisher() as published_messages:
             run_and_publish(config_file_aws)
-            assert len(published_messages) == 1
-            message = Message(rawstr=published_messages[0])
-            assert message.data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
+            assert len(published_messages) == 2
+            message[f"message{msg_id}"] = Message(rawstr=published_messages[msg_id])
+            msg_id = msg_id + 1
+            message[f"message{msg_id}"] = Message(rawstr=published_messages[msg_id])
+
+    assert message["message0"].data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected1
+    assert message["message1"].data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected2
 
 
 def test_run_and_no_publish_when_regex_unmatched(tmp_path, config_aws, caplog):
@@ -602,11 +611,12 @@ def test_run_and_publish_from_message_file(tmp_path, config_file_aws):
     message_file = tmp_path / "first.msg"
     with open(message_file, mode="w") as fd:
         fd.write(str(first_message))
+
     expected = "W_XX-OHB-Unknown,SAT,1-AWS-1B-RAD_C_OHB_20230817094846_G_D_20220621090100_20220621090618_T_B____.nc"
 
     with patched_publisher() as published_messages:
         main([str(config_file_aws), "-m", str(message_file)])
-        assert len(published_messages) == 1
+        assert len(published_messages) == 2
         message = Message(rawstr=published_messages[0])
 
         assert message.data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
