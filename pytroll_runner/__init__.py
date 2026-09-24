@@ -136,6 +136,15 @@ def curate_config(config):
                        "Either provide 'expected_files' or "
                        "'output_files_log_regex' in the config file.")
 
+    if "expected_files" in publisher_config and "output_files_log_regex" not in publisher_config:
+        workers = get_number_of_workers(config["script"])
+        if workers > 1:
+            raise ValueError(f"The 'expected_files' strategy cannot be used with {workers} workers. "
+                             "It identifies output files by globbing the file pattern and subtracting the "
+                             "files seen on the previous pass, which cannot tell apart the files written by "
+                             "concurrently running commands. Either set 'workers' to 1, or identify the "
+                             "output files with 'output_files_log_regex' instead.")
+
     subscriber_config = config["subscriber_config"]
     logger.debug("Subscriber config settings: ")
     for item, val in subscriber_config.items():
@@ -151,12 +160,17 @@ def run_from_new_subscriber(command, subscriber_settings):
         yield from run_on_messages(command, sub.recv())
 
 
+def get_number_of_workers(command: dict[str, str | int] | Path | str) -> int:
+    """Get the number of workers to run the command with."""
+    try:
+        return command.get("workers", 1)
+    except AttributeError:  # the command is a bare path or string
+        return 1
+
+
 def run_on_messages(command, messages):
     """Run the command on files from messages."""
-    try:
-        num_workers = command.get("workers", 1)
-    except AttributeError:
-        num_workers = 1
+    num_workers = get_number_of_workers(command)
     pool = ThreadPool(num_workers)
     run_command_on_message = partial(run_on_single_message, command)
 
