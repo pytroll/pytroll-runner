@@ -2,7 +2,9 @@
 import logging
 import os
 import sys
+import time
 from datetime import datetime
+from math import ceil
 from pathlib import Path
 from unittest import mock
 
@@ -39,12 +41,15 @@ done
 """
 
 
-def script_random_sleep(redirection_specification):
-    """A bash script to generate the output log for writing files."""
+DELAY_PER_FILE = 0.2
+WORKERS = 4
+
+
+def script_with_delay(redirection_specification, delay):
+    """A bash script that takes a known time to write each output file."""
     return f"""#!/bin/bash
 for file in $*; do
-    sleep_time=$(bc -l <<< "scale=4 ; $RANDOM/327670/5")
-    sleep $sleep_time
+    sleep {delay}
     cp "$file" "$file.bla"
     echo "Written output file : $file.bla"{redirection_specification}
 done
@@ -129,11 +134,11 @@ def command_bla(redirection_specification, tmp_path):
 
 
 @pytest.fixture
-def command_random_sleep(redirection_specification, tmp_path):
-    """Make a command script that adds ".bla" to the filename."""
-    command_file = tmp_path / "myscript_bla.sh"
+def command_with_delay(redirection_specification, tmp_path):
+    """Make a command script that takes a known time to add ".bla" to each filename."""
+    command_file = tmp_path / "myscript_delayed.sh"
     with open(command_file, "w") as fobj:
-        fobj.write(script_random_sleep(redirection_specification))
+        fobj.write(script_with_delay(redirection_specification, DELAY_PER_FILE))
     os.chmod(command_file, 0o700)
     return command_file
 
@@ -576,19 +581,17 @@ def ten_files_to_glob(tmp_path):
     return some_files
 
 
-def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, command_random_sleep, ten_files_to_glob):
-    """Test run and publish."""
+def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, command_with_delay, ten_files_to_glob):
+    """Test that the configured number of workers processes the messages in parallel."""
     sub_config = dict(nameserver=False, addresses=["ipc://bla"])
     pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
                       output_files_log_regex="Written output file : (.*.bla)",
                       topic="/hi/there")
-    command_path = os.fspath(command_random_sleep)
+    command_path = os.fspath(command_with_delay)
     test_config = dict(subscriber_config=sub_config,
-                       script=dict(command=command_path, workers=4),
+                       script=dict(command=command_path, workers=WORKERS),
                        publisher_config=pub_config)
-    yaml_file = tmp_path / "config.yaml"
-    with open(yaml_file, "w") as fd:
-        fd.write(yaml.dump(test_config))
+    yaml_file = write_config_file(tmp_path, test_config)
 
     some_files = ten_files_to_glob
     datas = [{"uri": os.fspath(tmp_path / f), "uid": f} for f in some_files]
@@ -596,10 +599,18 @@ def test_run_and_publish_with_command_subitem_and_thread_number(tmp_path, comman
 
     with patched_subscriber_recv(messages):
         with patched_publisher() as published_messages:
+            start = time.monotonic()
             run_and_publish(yaml_file)
-            assert len(published_messages) == 10
-            res_files = [Message(rawstr=msg).data["uid"] for msg in published_messages]
-            assert res_files != sorted(res_files)
+            elapsed = time.monotonic() - start
+
+    res_files = sorted(Message(rawstr=msg).data["uid"] for msg in published_messages)
+    assert res_files == sorted(f + ".bla" for f in some_files)
+
+    # the command sleeps for a known time per file, so the total tells us whether the workers
+    # actually ran at the same time; require it to be nearer the parallel estimate than the serial one
+    serial = DELAY_PER_FILE * len(some_files)
+    parallel = DELAY_PER_FILE * ceil(len(some_files) / WORKERS)
+    assert elapsed < (parallel + serial) / 2
 
 
 def test_run_and_publish_from_message_file(tmp_path, config_file_aws):
