@@ -7,6 +7,29 @@ The published messages will contain metadata from the input message (except for 
 
 To start the runner: `pytroll-runner config.yaml`
 
+When the command exits with a non-zero return code, the run is logged as an error and no message is published for it,
+even if it did write some output files. The runner carries on with the next message.
+
+### The output of the command
+
+The standard output and the standard error of the command are merged into a single stream, logged line by line as they
+arrive, and, when `output_files_log_regex` is used to identify the output files, matched against that regular
+expression.
+
+The merged stream is captured exactly as it arrives, but it is worth knowing that it does not necessarily arrive in the
+order the command produced it. Standard output is block buffered when it is a pipe and standard error is not, so a
+command writing to both can have all of its standard error arrive before any of its standard output. A partial line
+flushed to one stream can likewise be split in two by a line written to the other, which will stop
+`output_files_log_regex` from matching that line at all.
+
+In practice this means:
+
+- A regular expression matching a single line is safe.
+- A regular expression spanning several lines is only reliable if the command writes all of those lines to the same
+  stream.
+- A command that writes progress or status without a trailing newline, to either stream, is best wrapped in a small
+  script that sends that noise to `/dev/null`, so that it cannot cut into the lines naming the output files.
+
 ## The configuration file
 
 The configuration file is made of three sections.
