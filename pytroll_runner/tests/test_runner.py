@@ -12,6 +12,7 @@ from posttroll.message import Message
 from posttroll.testing import patched_publisher, patched_subscriber_recv
 
 from pytroll_runner import (
+    ScriptFailure,
     generate_message_from_expected_files,
     main,
     read_config,
@@ -36,6 +37,22 @@ for file in $*; do
     cp "$file" "$file.bla"
     echo "Written output file : $file.bla"{redirection_specification}
 done
+"""
+
+
+def script_bla_failing_on_bad(redirection_specification):
+    """A bash script that writes its output files but exits with an error for inputs named "bad"."""
+    return f"""#!/bin/bash
+status=0
+for file in $*; do
+    cp "$file" "$file.bla"
+    echo "Written output file : $file.bla"{redirection_specification}
+    if [[ "$file" == *bad* ]]; then
+        echo "Something went wrong for $file"{redirection_specification}
+        status=2
+    fi
+done
+exit $status
 """
 
 
@@ -136,6 +153,29 @@ def command_random_sleep(redirection_specification, tmp_path):
         fobj.write(script_random_sleep(redirection_specification))
     os.chmod(command_file, 0o700)
     return command_file
+
+
+@pytest.fixture
+def command_bla_failing_on_bad(redirection_specification, tmp_path):
+    """Make a command script that writes output files but fails for inputs named "bad"."""
+    command_file = tmp_path / "myscript_bla_failing.sh"
+    with open(command_file, "w") as fobj:
+        fobj.write(script_bla_failing_on_bad(redirection_specification))
+    os.chmod(command_file, 0o700)
+    return command_file
+
+
+@pytest.fixture
+def config_file_bla_failing_on_bad(tmp_path, command_bla_failing_on_bad):
+    """Make a config using the script that fails for inputs named "bad"."""
+    sub_config = dict(nameserver=False, addresses=["ipc://bla"])
+    pub_config = dict(publisher_settings=dict(nameservers=False, port=1979),
+                      output_files_log_regex="Written output file : (.*.bla)",
+                      topic="/hi/there")
+    test_config = dict(subscriber_config=sub_config,
+                       script=os.fspath(command_bla_failing_on_bad),
+                       publisher_config=pub_config)
+    return write_config_file(tmp_path, test_config)
 
 
 @pytest.fixture
@@ -620,3 +660,44 @@ def test_run_and_publish_from_message_file(tmp_path, config_file_aws):
         message = Message(rawstr=published_messages[0])
 
         assert message.data["uri"] == "/local_disk/aws_test/test/RAD_AWS_1B/" + expected
+
+
+def test_run_on_files_raises_when_the_script_fails(tmp_path, command_bla_failing_on_bad):
+    """Test that a non-zero exit code from the script is reported."""
+    bad_file = tmp_path / "bad_file"
+    bad_file.write_text("hi")
+
+    with pytest.raises(ScriptFailure, match="returned with exit code 2"):
+        run_on_files(os.fspath(command_bla_failing_on_bad), [os.fspath(bad_file)])
+
+
+def test_no_publishing_when_the_script_fails(tmp_path, config_file_bla_failing_on_bad, caplog):
+    """Test that nothing is published for a failed run, even when it did write output files."""
+    bad_file = tmp_path / "bad_file"
+    bad_file.write_text("hi")
+    message = Message("some_topic", "file", data={"uri": os.fspath(bad_file), "uid": "bad_file"})
+
+    caplog.set_level(logging.DEBUG)
+    with patched_subscriber_recv([message]):
+        with patched_publisher() as published_messages:
+            run_and_publish(config_file_bla_failing_on_bad)
+
+    assert published_messages == []
+    assert (tmp_path / "bad_file.bla").exists()  # the failed run did produce an output file
+    assert "returned with exit code 2" in caplog.text
+
+
+def test_a_failing_script_does_not_stop_the_runner(tmp_path, config_file_bla_failing_on_bad):
+    """Test that the messages following a failed run are still processed."""
+    messages = []
+    for filename in ["bad_file", "good_file"]:
+        filepath = tmp_path / filename
+        filepath.write_text("hi")
+        messages.append(Message("some_topic", "file", data={"uri": os.fspath(filepath), "uid": filename}))
+
+    with patched_subscriber_recv(messages):
+        with patched_publisher() as published_messages:
+            run_and_publish(config_file_bla_failing_on_bad)
+
+    assert len(published_messages) == 1
+    assert Message(rawstr=published_messages[0]).data["uid"] == "good_file.bla"

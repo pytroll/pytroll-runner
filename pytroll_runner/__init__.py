@@ -41,6 +41,11 @@ from posttroll.subscriber import create_subscriber_from_dict_config
 
 logger = logging.getLogger("pytroll-runner")
 
+
+class ScriptFailure(RuntimeError):
+    """Raised when the command exits with a non-zero return code."""
+
+
 def main(args: list[str] | None = None):
     """Main script."""
     parsed_args = parse_args(args=args)
@@ -160,7 +165,10 @@ def run_on_messages(command, messages):
     pool = ThreadPool(num_workers)
     run_command_on_message = partial(run_on_single_message, command)
 
-    yield from pool.imap_unordered(run_command_on_message, select_messages(messages))
+    for result in pool.imap_unordered(run_command_on_message, select_messages(messages)):
+        if result is None:  # the command failed, see run_on_single_message
+            continue
+        yield result
 
 
 def select_messages(messages):
@@ -173,8 +181,11 @@ def select_messages(messages):
 
 
 def run_on_single_message(command: dict[str, str | int] | Path | str,
-                          message: Message) -> tuple[bytes, dict[str, object]]:
-    """Run the command on files from message."""
+                          message: Message) -> tuple[bytes, dict[str, object]] | None:
+    """Run the command on files from message.
+
+    Returns None when the command failed, so that no message is published for it.
+    """
     metadata = message.data.copy()
     try:  # file
         files = [metadata.pop("uri")]
@@ -182,7 +193,11 @@ def run_on_single_message(command: dict[str, str | int] | Path | str,
         files = []
         files.extend(info["uri"] for info in metadata.pop("dataset"))
     command_to_call = get_command_to_call(command, metadata)
-    return run_on_files(command_to_call, files), message.data
+    try:
+        return run_on_files(command_to_call, files), message.data
+    except ScriptFailure:
+        logger.exception("No message will be sent for this input.")
+        return None
 
 
 def get_command_to_call(command: dict[str, str | int] | Path | str, metadata: dict[str, str]) -> str:
@@ -195,15 +210,22 @@ def get_command_to_call(command: dict[str, str | int] | Path | str, metadata: di
 
 
 def run_on_files(command: str, files: list[str]) -> bytes | None:
-    """Run the command of files."""
+    """Run the command of files.
+
+    Raises:
+        ScriptFailure: if the command exits with a non-zero return code.
+    """
     if not files:
         return
     logger.info(f"Start running command {command} on files {files}")
-    process = Popen([*command.split(), *files], stdout=PIPE, stderr=STDOUT)  # noqa: S603
     out = b""
-    for line in process.stdout:
-        out += b"\n" + line
-        logger.debug("  " + line.decode("utf-8").rstrip())
+    with Popen([*command.split(), *files], stdout=PIPE, stderr=STDOUT) as process:  # noqa: S603
+        for line in process.stdout:
+            out += b"\n" + line
+            logger.debug("  " + line.decode("utf-8").rstrip())
+    if process.returncode:
+        raise ScriptFailure(f"Command {command} on files {files} "
+                            f"returned with exit code {process.returncode}.")
     return out
 
 
